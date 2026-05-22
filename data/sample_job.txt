@@ -1,0 +1,17 @@
+Title: Junior Python Data Analyst
+Company: Example Analytics Studio
+Location: Remote - United States
+
+Example Analytics Studio is hiring a junior Python Data Analyst to help
+maintain internal dashboards, document data workflows, and troubleshoot
+small reporting issues for operations teams.
+
+You will use Python, SQL, Git, and APIs to automate recurring data checks,
+improve dashboard reliability, and write clear documentation. This is a
+hybrid-friendly role with mentoring, practical Linux exposure, and a focus on
+entry-level growth.
+
+Nice to have:
+- Curiosity about data quality and workflow automation
+- Comfort asking questions and documenting what you learn
+- Interest in building simple tools that help teams make decisions
