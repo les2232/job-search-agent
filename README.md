@@ -21,6 +21,35 @@ python .\src\main.py .\data\sample_job.txt
 python .\src\main.py .\path\to\another_job.txt
 ```
 
+Generate local draft application materials from a job posting and your local
+resume/profile file:
+
+```powershell
+python .\src\main.py generate-application .\data\sample_job.txt --resume .\data\profile\resume_base.md
+```
+
+The resume/profile file must be created locally by you. A good starting path is
+`data/profile/resume_base.md`. Keep it factual and include only details you are
+comfortable storing on your own machine.
+
+## Local UI
+
+Install the UI dependency:
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+Run the local browser UI:
+
+```powershell
+streamlit run ui_app.py
+```
+
+The UI lets you paste a job posting, upload a `.txt` posting, score it, save it
+to the local tracker, and view current tracked jobs. Everything remains local;
+`data/jobs.csv` is ignored by Git.
+
 ## Configuration
 
 Default scoring rules live in `config.example.json`. They include the starting
@@ -46,9 +75,56 @@ tracked, the app skips the duplicate and prints a clear message.
 `data/jobs.csv` is local-only and ignored by Git. Do not commit real job leads,
 application notes, source URLs, or personal application details.
 
+List tracked jobs:
+
+```powershell
+python .\src\main.py list
+```
+
+Filter tracked jobs:
+
+```powershell
+python .\src\main.py list --status New
+python .\src\main.py list --recommendation Apply
+```
+
+Update a tracked job's status:
+
+```powershell
+python .\src\main.py update-status --title "Junior Python Data Analyst" --company "Example Analytics Studio" --status Applied
+```
+
+Repair the local tracker:
+
+```powershell
+python .\src\main.py repair-tracker
+```
+
+`repair-tracker` creates a timestamped backup before modifying `data/jobs.csv`.
+It removes duplicate header rows, normalizes rows to the current schema, and
+dedupes repeated jobs by title and company while preserving the first version.
+
+## Application Drafts
+
+The `generate-application` command creates Markdown drafts in `output/`:
+`tailored_resume.md`, `cover_letter.md`, and `match_notes.md`.
+
+Draft generation is intentionally conservative. It reads the job posting and
+your local resume/profile, finds configured keywords that appear in both, and
+creates draft text from that local information. It does not use AI, call APIs,
+scrape websites, or invent experience.
+
+Every generated file includes this warning: "Draft only. Review carefully before
+using. Do not include claims you cannot verify." Review all generated materials
+manually before using them.
+
+`data/profile/` and `output/` are ignored by Git. Do not commit real resumes,
+profile facts, generated cover letters, or personal application materials.
+
 ## Safety Notes
 
 - No real resumes, emails, job history, credentials, or API keys are included.
 - `config.local.json` is ignored; use `config.example.json` for safe examples only.
 - `data/jobs.csv` is generated locally and ignored by Git.
+- `data/profile/` and `output/` are local-only and ignored by Git.
 - The project does not scrape login-protected sites or automate applications.

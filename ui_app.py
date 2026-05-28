@@ -1,0 +1,105 @@
+"""Local Streamlit UI for the job search agent."""
+
+from pathlib import Path
+import sys
+
+import streamlit as st
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+SRC_PATH = PROJECT_ROOT / "src"
+if str(SRC_PATH) not in sys.path:
+    sys.path.insert(0, str(SRC_PATH))
+
+from job_parser import parse_job_text
+from job_scorer import score_job
+from tracker import read_tracked_jobs, save_job_result
+
+
+JOBS_CSV_PATH = PROJECT_ROOT / "data" / "jobs.csv"
+
+
+def main() -> None:
+    st.set_page_config(page_title="Job Search Agent", layout="wide")
+    st.title("Job Search Agent")
+
+    job_text = _get_job_text_input()
+
+    if st.button("Score job", type="primary"):
+        if not job_text.strip():
+            st.error("Paste a job posting or upload a .txt file before scoring.")
+        else:
+            job = parse_job_text(job_text)
+            score_details = score_job(job)
+            st.session_state["scored_job"] = job
+            st.session_state["score_details"] = score_details
+            st.session_state.pop("save_message", None)
+
+    job = st.session_state.get("scored_job")
+    score_details = st.session_state.get("score_details")
+    if job and score_details:
+        _show_score_summary(job, score_details)
+
+        if st.button("Save to tracker"):
+            save_result = save_job_result(JOBS_CSV_PATH, job, score_details)
+            st.session_state["save_message"] = save_result
+
+    save_message = st.session_state.get("save_message")
+    if save_message:
+        if save_message["saved"]:
+            st.success(save_message["message"])
+        else:
+            st.info(save_message["message"])
+
+    _show_tracked_jobs()
+
+
+def _get_job_text_input() -> str:
+    pasted_text = st.text_area("Paste job posting text", height=260)
+    uploaded_file = st.file_uploader("Or upload a .txt job posting", type=["txt"])
+
+    if uploaded_file is None:
+        return pasted_text
+
+    return uploaded_file.getvalue().decode("utf-8")
+
+
+def _show_score_summary(
+    job: dict[str, str],
+    score_details: dict[str, object],
+) -> None:
+    st.subheader("Score")
+    title_col, company_col, location_col = st.columns(3)
+    title_col.metric("Title", job["title"])
+    company_col.metric("Company", job["company"])
+    location_col.metric("Location", job["location"])
+
+    score_col, recommendation_col = st.columns(2)
+    score_col.metric("Score", f"{score_details['score']}/100")
+    recommendation_col.metric("Recommendation", str(score_details["recommendation"]))
+
+    matched_keywords = _format_list(score_details["matched_keywords"])
+    concerns = _format_list(score_details["concerns"])
+    st.write(f"Matched keywords: {matched_keywords}")
+    st.write(f"Concerns: {concerns}")
+
+
+def _show_tracked_jobs() -> None:
+    st.subheader("Tracked Jobs")
+    tracked_jobs = read_tracked_jobs(JOBS_CSV_PATH)
+
+    if not tracked_jobs:
+        st.caption("No tracked jobs yet.")
+        return
+
+    st.dataframe(tracked_jobs, use_container_width=True, hide_index=True)
+
+
+def _format_list(value: object) -> str:
+    if isinstance(value, list) and value:
+        return ", ".join(str(item) for item in value)
+    return "None"
+
+
+if __name__ == "__main__":
+    main()

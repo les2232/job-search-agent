@@ -9,6 +9,7 @@ config.local.json
 
 data/*.csv
 data/*.json
+data/profile/
 output/
 resumes/
 cover_letters/
