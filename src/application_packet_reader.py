@@ -25,6 +25,25 @@ APPLICATION_STATUSES = [
     "Archived",
 ]
 DEFAULT_APPLICATION_STATUS = "Interested"
+NEXT_ACTIONS = {
+    "Interested": "Review score and decide whether to tailor.",
+    "Tailoring": "Finish resume/cover letter edits.",
+    "Ready to Apply": "Submit application.",
+    "Applied": "Track response or follow up later.",
+    "Interview": "Prepare interview notes.",
+    "Offer": "Review offer details.",
+    "Rejected": "Archive or review lessons learned.",
+    "Archived": "No action needed.",
+}
+SORT_OPTIONS = [
+    "Newest saved first",
+    "Oldest saved first",
+    "Highest score first",
+    "Lowest score first",
+    "Status",
+    "Company",
+    "Title",
+]
 
 
 def list_saved_application_packets(
@@ -41,6 +60,100 @@ def list_saved_application_packets(
         if packet:
             summaries.append(packet["summary"])
     return summaries
+
+
+def count_saved_applications_by_status(
+    packets: list[dict[str, object]],
+) -> dict[str, int]:
+    """Return status counts for saved applications."""
+    counts = {status: 0 for status in APPLICATION_STATUSES}
+    for packet in packets:
+        status = _safe_text(packet.get("status"), DEFAULT_APPLICATION_STATUS)
+        if status not in counts:
+            status = DEFAULT_APPLICATION_STATUS
+        counts[status] += 1
+    return counts
+
+
+def filter_saved_application_packets(
+    packets: list[dict[str, object]],
+    status: str | None = None,
+    recommendation: str | None = None,
+    apply_recommendation: str | None = None,
+    work_mode: str | None = None,
+    min_score: int | None = None,
+    company_search: str | None = None,
+    text_search: str | None = None,
+) -> list[dict[str, object]]:
+    """Filter saved application summaries without exposing raw packet data."""
+    filtered_packets = []
+    for packet in packets:
+        if status and not _matches_text(packet.get("status"), status):
+            continue
+        if recommendation and not _matches_text(
+            packet.get("recommendation"),
+            recommendation,
+        ):
+            continue
+        if apply_recommendation and not _contains_text(
+            packet.get("apply_recommendation"),
+            apply_recommendation,
+        ):
+            continue
+        if work_mode and not _matches_text(packet.get("work_mode"), work_mode):
+            continue
+        if min_score is not None and _score_value(packet.get("score")) < min_score:
+            continue
+        if company_search and not _contains_text(
+            packet.get("company"),
+            company_search,
+        ):
+            continue
+        if text_search and not (
+            _contains_text(packet.get("title"), text_search)
+            or _contains_text(packet.get("company"), text_search)
+        ):
+            continue
+        filtered_packets.append(_sanitize_summary(packet))
+    return filtered_packets
+
+
+def sort_saved_application_packets(
+    packets: list[dict[str, object]],
+    sort_by: str,
+) -> list[dict[str, object]]:
+    """Sort saved application summaries for dashboard display."""
+    if sort_by == "Oldest saved first":
+        return sorted(packets, key=lambda packet: _date_sort_key(packet.get("saved_date")))
+    if sort_by == "Highest score first":
+        return sorted(packets, key=lambda packet: _score_value(packet.get("score")), reverse=True)
+    if sort_by == "Lowest score first":
+        return sorted(packets, key=lambda packet: _score_value(packet.get("score")))
+    if sort_by == "Status":
+        return sorted(
+            packets,
+            key=lambda packet: (
+                APPLICATION_STATUSES.index(str(packet.get("status")))
+                if packet.get("status") in APPLICATION_STATUSES
+                else 0,
+                str(packet.get("company", "")).lower(),
+            ),
+        )
+    if sort_by == "Company":
+        return sorted(packets, key=lambda packet: str(packet.get("company", "")).lower())
+    if sort_by == "Title":
+        return sorted(packets, key=lambda packet: str(packet.get("title", "")).lower())
+    return sorted(
+        packets,
+        key=lambda packet: _date_sort_key(packet.get("saved_date")),
+        reverse=True,
+    )
+
+
+def get_next_action(status: object) -> str:
+    """Return a simple next action for an application status."""
+    status_text = _safe_text(status, DEFAULT_APPLICATION_STATUS)
+    return NEXT_ACTIONS.get(status_text, NEXT_ACTIONS[DEFAULT_APPLICATION_STATUS])
 
 
 def load_saved_application_packet(packet_folder: str | Path) -> dict[str, object] | None:
@@ -159,6 +272,7 @@ def _build_summary(
         "status_updated_at": application_tracking["status_updated_at"],
         "applied_date": application_tracking["applied_date"],
         "notes": application_tracking["notes"],
+        "next_action": get_next_action(application_tracking["status"]),
         "matched_keywords_count": len(matched_keywords),
         "concern_count": len(concerns),
     }
@@ -202,6 +316,29 @@ def _safe_text(value: object, fallback: str) -> str:
     return value.strip()
 
 
+def _matches_text(value: object, expected: str) -> bool:
+    return str(value).strip().lower() == expected.strip().lower()
+
+
+def _contains_text(value: object, expected: str) -> bool:
+    return expected.strip().lower() in str(value).lower()
+
+
+def _score_value(value: object) -> int:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return 0
+
+
+def _date_sort_key(value: object) -> str:
+    text = _safe_text(value, "0000-00-00")
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", text):
+        return text
+    return "0000-00-00"
+
+
 def _optional_text(value: object) -> str | None:
     if not isinstance(value, str) or not value.strip():
         return None
@@ -222,3 +359,11 @@ def _sanitize_packet_value(value: object) -> object:
     if isinstance(value, list):
         return [_sanitize_packet_value(item) for item in value]
     return value
+
+
+def _sanitize_summary(packet: dict[str, object]) -> dict[str, object]:
+    return {
+        str(key): value
+        for key, value in packet.items()
+        if str(key) not in RAW_TEXT_KEYS
+    }

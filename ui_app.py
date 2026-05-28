@@ -16,8 +16,12 @@ from application_generator import generate_application_materials
 from application_packet import generate_application_packet
 from application_packet_reader import (
     APPLICATION_STATUSES,
+    SORT_OPTIONS,
+    count_saved_applications_by_status,
+    filter_saved_application_packets,
     list_saved_application_packets,
     load_saved_application_packet,
+    sort_saved_application_packets,
     update_application_status,
 )
 from application_packet_writer import save_application_packet
@@ -244,6 +248,12 @@ def _show_saved_applications_tab() -> None:
         st.info("No saved application packets found yet.")
         return
 
+    _show_saved_application_metrics(saved_packets)
+    filtered_packets = _show_saved_application_filters(saved_packets)
+    if not filtered_packets:
+        st.info("No saved applications match the current filters.")
+        return
+
     table_rows = [
         {
             "saved_date": packet["saved_date"],
@@ -257,17 +267,18 @@ def _show_saved_applications_tab() -> None:
             "status_updated_at": packet["status_updated_at"],
             "applied_date": packet["applied_date"],
             "apply_recommendation": packet["apply_recommendation"],
+            "next_action": packet["next_action"],
             "matched_keywords": packet["matched_keywords_count"],
             "concerns": packet["concern_count"],
             "folder_path": str(packet["folder_path"]),
         }
-        for packet in saved_packets
+        for packet in filtered_packets
     ]
     st.dataframe(table_rows, use_container_width=True, hide_index=True)
 
     packet_options = {
         _format_saved_packet_label(packet): packet
-        for packet in saved_packets
+        for packet in filtered_packets
     }
     selected_label = st.selectbox("View packet details", list(packet_options))
     selected_packet = packet_options[selected_label]
@@ -279,6 +290,73 @@ def _show_saved_applications_tab() -> None:
     st.caption(f"Saved folder: {packet_details['folder_path']}")
     _show_saved_packet_status_controls(packet_details)
     _show_saved_packet_details(packet_details["application_packet"])
+
+
+def _show_saved_application_metrics(saved_packets: list[dict[str, object]]) -> None:
+    status_counts = count_saved_applications_by_status(saved_packets)
+    st.metric("Total saved applications", len(saved_packets))
+
+    metric_cols = st.columns(4)
+    for index, status in enumerate(APPLICATION_STATUSES):
+        metric_cols[index % 4].metric(status, status_counts[status])
+
+
+def _show_saved_application_filters(
+    saved_packets: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    st.subheader("Filters")
+    status_options = ["All"] + APPLICATION_STATUSES
+    recommendation_options = ["All"] + sorted(
+        {str(packet["recommendation"]) for packet in saved_packets}
+    )
+    apply_recommendation_options = ["All"] + sorted(
+        {str(packet["apply_recommendation"]) for packet in saved_packets}
+    )
+    work_mode_options = ["All"] + sorted(
+        {str(packet["work_mode"]) for packet in saved_packets}
+    )
+
+    filter_cols = st.columns(4)
+    selected_status = filter_cols[0].selectbox("Status", status_options)
+    selected_recommendation = filter_cols[1].selectbox(
+        "Recommendation",
+        recommendation_options,
+    )
+    selected_work_mode = filter_cols[2].selectbox("Work mode", work_mode_options)
+    selected_sort = filter_cols[3].selectbox("Sort", SORT_OPTIONS)
+
+    search_cols = st.columns(4)
+    selected_apply_recommendation = search_cols[0].selectbox(
+        "Apply recommendation",
+        apply_recommendation_options,
+    )
+    min_score = search_cols[1].number_input(
+        "Minimum score",
+        min_value=0,
+        max_value=100,
+        value=0,
+        step=5,
+    )
+    company_search = search_cols[2].text_input("Company search")
+    text_search = search_cols[3].text_input("Title/company search")
+
+    filtered_packets = filter_saved_application_packets(
+        saved_packets,
+        status=None if selected_status == "All" else selected_status,
+        recommendation=(
+            None if selected_recommendation == "All" else selected_recommendation
+        ),
+        apply_recommendation=(
+            None
+            if selected_apply_recommendation == "All"
+            else selected_apply_recommendation
+        ),
+        work_mode=None if selected_work_mode == "All" else selected_work_mode,
+        min_score=int(min_score) if min_score else None,
+        company_search=company_search or None,
+        text_search=text_search or None,
+    )
+    return sort_saved_application_packets(filtered_packets, selected_sort)
 
 
 def _show_saved_packet_status_controls(packet_details: dict[str, object]) -> None:

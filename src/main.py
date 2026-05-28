@@ -6,6 +6,7 @@ import sys
 from application_generator import generate_application_materials
 from application_packet import generate_application_packet
 from application_packet_reader import list_saved_application_packets
+from application_packet_reader import filter_saved_application_packets
 from application_packet_reader import update_application_status
 from application_packet_writer import save_application_packet
 from job_parser import parse_job_text
@@ -36,7 +37,7 @@ def main(argv: list[str] | None = None, jobs_csv_path: Path = JOBS_CSV_PATH) -> 
     if args and args[0] == "repair-tracker":
         return repair_tracker_command(jobs_csv_path)
     if args and args[0] == "--list-packets":
-        return list_packets_command(APPLICATIONS_DIR)
+        return list_packets_command_with_args(args[1:], APPLICATIONS_DIR)
     if args and args[0] == "--update-packet-status":
         return update_packet_status_command(args[1:])
 
@@ -157,7 +158,32 @@ def repair_tracker_command(jobs_csv_path: Path) -> int:
 
 
 def list_packets_command(applications_dir: Path) -> int:
+    return list_packets_command_with_args([], applications_dir)
+
+
+def list_packets_command_with_args(args: list[str], applications_dir: Path) -> int:
+    status = _get_option(args, "--status")
+    min_score_text = _get_option(args, "--min-score")
+    if _has_unknown_args(args, {"--status", "--min-score"}):
+        print(
+            "Error: Use python .\\src\\main.py --list-packets "
+            "[--status Tailoring] [--min-score 70]"
+        )
+        return 1
+
+    min_score = None
+    if min_score_text is not None:
+        if not min_score_text.isdigit():
+            print("Error: --min-score must be a number from 0 to 100.")
+            return 1
+        min_score = int(min_score_text)
+
     packets = list_saved_application_packets(applications_dir)
+    packets = filter_saved_application_packets(
+        packets,
+        status=status,
+        min_score=min_score,
+    )
     if not packets:
         print(f"No saved application packets found at: {applications_dir}")
         return 0

@@ -2,8 +2,12 @@ import json
 from pathlib import Path
 
 from application_packet_reader import (
+    count_saved_applications_by_status,
+    filter_saved_application_packets,
+    get_next_action,
     list_saved_application_packets,
     load_saved_application_packet,
+    sort_saved_application_packets,
     update_application_status,
 )
 
@@ -46,6 +50,33 @@ def _packet_payload() -> dict[str, object]:
     }
 
 
+def _summary(
+    title: str = "Junior Python Analyst",
+    company: str = "Example Analytics Studio",
+    status: str = "Interested",
+    score: int = 85,
+    saved_date: str = "2026-05-28",
+) -> dict[str, object]:
+    return {
+        "folder_path": Path("applications/example"),
+        "saved_date": saved_date,
+        "title": title,
+        "company": company,
+        "location": "Remote",
+        "work_mode": "Remote",
+        "score": score,
+        "recommendation": "Apply",
+        "apply_recommendation": "Apply after tailoring.",
+        "status": status,
+        "status_updated_at": "",
+        "applied_date": None,
+        "notes": "",
+        "next_action": get_next_action(status),
+        "matched_keywords_count": 2,
+        "concern_count": 0,
+    }
+
+
 def _write_packet(root: Path, folder_name: str, payload: dict[str, object]) -> Path:
     folder_path = root / folder_name
     folder_path.mkdir(parents=True)
@@ -79,6 +110,7 @@ def test_list_saved_application_packets_lists_valid_packet(tmp_path: Path) -> No
     assert packets[0]["status"] == "Tailoring"
     assert packets[0]["status_updated_at"] == "2026-05-28T10:00:00"
     assert packets[0]["applied_date"] is None
+    assert packets[0]["next_action"] == "Finish resume/cover letter edits."
 
 
 def test_list_saved_application_packets_skips_broken_folder(tmp_path: Path) -> None:
@@ -241,3 +273,110 @@ def test_update_application_status_does_not_add_raw_job_description(
     assert "Private raw job text" not in packet_text
     assert "raw_text" not in packet_text
     assert "raw_job_description" not in packet_text
+
+
+def test_count_saved_applications_by_status() -> None:
+    packets = [
+        _summary(status="Interested"),
+        _summary(status="Tailoring"),
+        _summary(status="Tailoring"),
+        _summary(status="Applied"),
+    ]
+
+    counts = count_saved_applications_by_status(packets)
+
+    assert counts["Interested"] == 1
+    assert counts["Tailoring"] == 2
+    assert counts["Applied"] == 1
+    assert counts["Archived"] == 0
+
+
+def test_filter_saved_application_packets_by_status() -> None:
+    packets = [
+        _summary(status="Interested"),
+        _summary(status="Tailoring"),
+    ]
+
+    filtered = filter_saved_application_packets(packets, status="tailoring")
+
+    assert len(filtered) == 1
+    assert filtered[0]["status"] == "Tailoring"
+
+
+def test_filter_saved_application_packets_by_min_score() -> None:
+    packets = [
+        _summary(score=55),
+        _summary(score=90),
+    ]
+
+    filtered = filter_saved_application_packets(packets, min_score=70)
+
+    assert len(filtered) == 1
+    assert filtered[0]["score"] == 90
+
+
+def test_filter_saved_application_packets_by_company_and_title_search() -> None:
+    packets = [
+        _summary(title="Junior Python Analyst", company="Example Analytics Studio"),
+        _summary(title="Desktop Support Specialist", company="Campus IT"),
+    ]
+
+    company_filtered = filter_saved_application_packets(
+        packets,
+        company_search="analytics",
+    )
+    text_filtered = filter_saved_application_packets(
+        packets,
+        text_search="desktop",
+    )
+
+    assert company_filtered[0]["company"] == "Example Analytics Studio"
+    assert text_filtered[0]["title"] == "Desktop Support Specialist"
+
+
+def test_get_next_action_returns_status_guidance() -> None:
+    assert get_next_action("Interested") == "Review score and decide whether to tailor."
+    assert get_next_action("Ready to Apply") == "Submit application."
+    assert get_next_action("Archived") == "No action needed."
+
+
+def test_sort_saved_application_packets_by_score_and_saved_date() -> None:
+    packets = [
+        _summary(title="Low", score=50, saved_date="2026-05-27"),
+        _summary(title="High", score=95, saved_date="2026-05-28"),
+    ]
+
+    by_score = sort_saved_application_packets(packets, "Highest score first")
+    by_oldest = sort_saved_application_packets(packets, "Oldest saved first")
+
+    assert by_score[0]["title"] == "High"
+    assert by_oldest[0]["title"] == "Low"
+
+
+def test_dashboard_helpers_handle_missing_fields_without_crashing() -> None:
+    packets = [{"title": "Unknown"}]
+
+    counts = count_saved_applications_by_status(packets)
+    filtered = filter_saved_application_packets(packets, min_score=1)
+    sorted_packets = sort_saved_application_packets(packets, "Company")
+
+    assert counts["Interested"] == 1
+    assert filtered == []
+    assert sorted_packets == packets
+
+
+def test_filtered_summaries_do_not_return_raw_job_text() -> None:
+    packets = [
+        {
+            **_summary(),
+            "raw_text": "Private raw text",
+            "raw_job_description": "Private raw text",
+        }
+    ]
+
+    filtered = filter_saved_application_packets(packets, status="Interested")
+
+    assert "Private raw text" in str(packets)
+    assert "Private raw text" not in str(filtered)
+    assert "raw_text" not in str(filtered)
+    assert "raw_job_description" not in str(filtered)
