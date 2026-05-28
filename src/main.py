@@ -6,6 +6,7 @@ import sys
 from application_generator import generate_application_materials
 from application_packet import generate_application_packet
 from application_packet_reader import list_saved_application_packets
+from application_packet_reader import update_application_status
 from application_packet_writer import save_application_packet
 from job_parser import parse_job_text
 from job_scorer import score_job
@@ -36,6 +37,8 @@ def main(argv: list[str] | None = None, jobs_csv_path: Path = JOBS_CSV_PATH) -> 
         return repair_tracker_command(jobs_csv_path)
     if args and args[0] == "--list-packets":
         return list_packets_command(APPLICATIONS_DIR)
+    if args and args[0] == "--update-packet-status":
+        return update_packet_status_command(args[1:])
 
     include_packet = "--packet" in args
     save_packet = "--save-packet" in args
@@ -168,12 +171,51 @@ def list_packets_command(applications_dir: Path) -> int:
         print(f"   Work mode: {packet['work_mode']}")
         print(f"   Score: {packet['score']}")
         print(f"   Recommendation: {packet['recommendation']}")
+        print(f"   Status: {packet['status']}")
+        print(f"   Status updated: {packet['status_updated_at'] or 'Not set'}")
+        print(f"   Applied date: {packet['applied_date'] or 'Not set'}")
         print(f"   Apply recommendation: {packet['apply_recommendation']}")
         print(f"   Matched keywords: {packet['matched_keywords_count']}")
         print(f"   Concerns: {packet['concern_count']}")
         print(f"   Folder: {packet['folder_path']}")
 
     return 0
+
+
+def update_packet_status_command(args: list[str]) -> int:
+    if not args:
+        print(
+            "Error: Use python .\\src\\main.py --update-packet-status "
+            "\"applications\\folder-name\" --status Applied "
+            "[--notes \"...\"] [--applied-date YYYY-MM-DD]"
+        )
+        return 1
+
+    packet_folder = Path(args[0])
+    option_args = args[1:]
+    status = _get_option(option_args, "--status")
+    notes = _get_option(option_args, "--notes")
+    applied_date = _get_option(option_args, "--applied-date")
+
+    if (
+        status is None
+        or _has_unknown_args(option_args, {"--status", "--notes", "--applied-date"})
+    ):
+        print(
+            "Error: Use python .\\src\\main.py --update-packet-status "
+            "\"applications\\folder-name\" --status Applied "
+            "[--notes \"...\"] [--applied-date YYYY-MM-DD]"
+        )
+        return 1
+
+    result = update_application_status(
+        packet_folder,
+        status,
+        notes=notes,
+        applied_date=applied_date,
+    )
+    print(result["message"])
+    return 0 if result["updated"] else 1
 
 
 def generate_application_command(args: list[str]) -> int:

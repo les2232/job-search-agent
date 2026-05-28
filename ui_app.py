@@ -15,8 +15,10 @@ if str(SRC_PATH) not in sys.path:
 from application_generator import generate_application_materials
 from application_packet import generate_application_packet
 from application_packet_reader import (
+    APPLICATION_STATUSES,
     list_saved_application_packets,
     load_saved_application_packet,
+    update_application_status,
 )
 from application_packet_writer import save_application_packet
 from job_parser import parse_job_text
@@ -251,6 +253,9 @@ def _show_saved_applications_tab() -> None:
             "work_mode": packet["work_mode"],
             "score": packet["score"],
             "recommendation": packet["recommendation"],
+            "status": packet["status"],
+            "status_updated_at": packet["status_updated_at"],
+            "applied_date": packet["applied_date"],
             "apply_recommendation": packet["apply_recommendation"],
             "matched_keywords": packet["matched_keywords_count"],
             "concerns": packet["concern_count"],
@@ -272,7 +277,51 @@ def _show_saved_applications_tab() -> None:
         return
 
     st.caption(f"Saved folder: {packet_details['folder_path']}")
+    _show_saved_packet_status_controls(packet_details)
     _show_saved_packet_details(packet_details["application_packet"])
+
+
+def _show_saved_packet_status_controls(packet_details: dict[str, object]) -> None:
+    tracking = packet_details.get("application_tracking")
+    if not isinstance(tracking, dict):
+        tracking = {}
+
+    current_status = str(tracking.get("status", "Interested"))
+    if current_status not in APPLICATION_STATUSES:
+        current_status = "Interested"
+
+    st.subheader("Application Status")
+    status = st.selectbox(
+        "Status",
+        APPLICATION_STATUSES,
+        index=APPLICATION_STATUSES.index(current_status),
+    )
+    notes = st.text_area(
+        "Notes",
+        value=str(tracking.get("notes") or ""),
+        height=90,
+    )
+
+    applied_date = None
+    if status in {"Applied", "Interview", "Offer", "Rejected", "Archived"}:
+        applied_date = st.text_input(
+            "Applied date",
+            value=str(tracking.get("applied_date") or ""),
+            placeholder="YYYY-MM-DD",
+        )
+
+    if st.button("Update application status"):
+        result = update_application_status(
+            packet_details["folder_path"],
+            status,
+            notes=notes,
+            applied_date=applied_date,
+        )
+        if result["updated"]:
+            st.success(result["message"])
+            st.rerun()
+        else:
+            st.warning(result["message"])
 
 
 def _show_saved_packet_details(packet: object) -> None:
@@ -521,8 +570,8 @@ def _format_saved_packet_label(packet: dict[str, object]) -> str:
     title = packet["title"] or "Unknown title"
     company = packet["company"] or "Unknown company"
     saved_date = packet["saved_date"] or "Unknown date"
-    recommendation = packet["recommendation"] or "Unknown"
-    return f"{title} at {company} ({saved_date}, {recommendation})"
+    status = packet["status"] or "Interested"
+    return f"{title} at {company} ({saved_date}, {status})"
 
 
 def _format_list(value: object) -> str:

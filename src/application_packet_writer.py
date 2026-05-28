@@ -1,6 +1,6 @@
 """Save generated application packets to local folders."""
 
-from datetime import date
+from datetime import date, datetime
 import json
 from pathlib import Path
 import re
@@ -23,6 +23,8 @@ RAW_TEXT_KEYS = {
     "raw_job_description",
     "job_description",
 }
+
+DEFAULT_APPLICATION_STATUS = "Interested"
 
 
 def save_application_packet(
@@ -230,6 +232,12 @@ def _build_packet_payload(
 ) -> dict[str, object]:
     return {
         "created_date": packet_date.isoformat(),
+        "application_tracking": {
+            "status": DEFAULT_APPLICATION_STATUS,
+            "status_updated_at": _current_timestamp(),
+            "applied_date": None,
+            "notes": "",
+        },
         "job_metadata": metadata,
         "score_summary": {
             "score": score_result.get("score"),
@@ -253,6 +261,10 @@ def _sanitize_packet_value(value: object) -> object:
     if isinstance(value, list):
         return [_sanitize_packet_value(item) for item in value]
     return value
+
+
+def _current_timestamp() -> str:
+    return datetime.now().isoformat(timespec="seconds")
 
 
 def _format_markdown_list(label: str, values: object) -> str:

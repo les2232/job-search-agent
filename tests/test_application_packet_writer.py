@@ -151,5 +151,9 @@ def test_save_application_packet_json_is_valid(tmp_path: Path) -> None:
     assert payload["created_date"] == "2026-05-28"
     assert payload["job_metadata"]["company"] == "Example Analytics Studio"
     assert payload["score_summary"]["score"] == 85
+    assert payload["application_tracking"]["status"] == "Interested"
+    assert payload["application_tracking"]["applied_date"] is None
+    assert payload["application_tracking"]["notes"] == ""
+    assert payload["application_tracking"]["status_updated_at"]
     assert "raw_text" not in payload["score_summary"]
     assert "raw_text" not in payload["application_packet"]
