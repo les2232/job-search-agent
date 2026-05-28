@@ -5,6 +5,7 @@ venv/
 
 .env
 config.yaml
+config.local.json
 
 data/*.csv
 data/*.json
@@ -17,3 +18,9 @@ cover_letters/
 .DS_Store
 Thumbs.db
 .vscode/
+
+.pytest_cache/
+.pytest_tmp/
+__pycache__/
+*.pyc
+

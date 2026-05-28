@@ -1,6 +1,7 @@
 """Save scored jobs to a local CSV tracker."""
 
 import csv
+from datetime import date
 from pathlib import Path
 
 
@@ -10,8 +11,11 @@ CSV_FIELDS = [
     "location",
     "score",
     "recommendation",
-    "matched_keywords",
-    "concerns",
+    "status",
+    "notes",
+    "source_url",
+    "date_found",
+    "follow_up_date",
 ]
 
 
@@ -19,10 +23,20 @@ def save_job_result(
     csv_path: Path,
     job: dict[str, str],
     score_details: dict[str, object],
-) -> None:
+) -> dict[str, object]:
     """Append a scored job result to the tracker CSV."""
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     _ensure_csv_header(csv_path)
+
+    if _job_already_tracked(csv_path, job):
+        return {
+            "saved": False,
+            "message": (
+                f"Already tracked: {job['title']} at {job['company']}. "
+                "Skipped duplicate."
+            ),
+        }
+
     should_write_header = not csv_path.exists() or csv_path.stat().st_size == 0
 
     row = {
@@ -31,8 +45,11 @@ def save_job_result(
         "location": job["location"],
         "score": score_details["score"],
         "recommendation": score_details["recommendation"],
-        "matched_keywords": _join_list(score_details["matched_keywords"]),
-        "concerns": _join_list(score_details["concerns"]),
+        "status": "New",
+        "notes": "",
+        "source_url": "",
+        "date_found": date.today().isoformat(),
+        "follow_up_date": "",
     }
 
     with csv_path.open("a", newline="", encoding="utf-8") as csv_file:
@@ -40,6 +57,35 @@ def save_job_result(
         if should_write_header:
             writer.writeheader()
         writer.writerow(row)
+
+    return {
+        "saved": True,
+        "message": f"Saved result to: {csv_path}",
+    }
+
+
+def _job_already_tracked(csv_path: Path, job: dict[str, str]) -> bool:
+    if not csv_path.exists() or csv_path.stat().st_size == 0:
+        return False
+
+    with csv_path.open(newline="", encoding="utf-8") as csv_file:
+        reader = csv.DictReader(csv_file)
+        for row in reader:
+            if _same_job(row, job):
+                return True
+
+    return False
+
+
+def _same_job(row: dict[str, str], job: dict[str, str]) -> bool:
+    return (
+        _normalize(row.get("title", "")) == _normalize(job["title"])
+        and _normalize(row.get("company", "")) == _normalize(job["company"])
+    )
+
+
+def _normalize(value: str) -> str:
+    return value.strip().lower()
 
 
 def _ensure_csv_header(csv_path: Path) -> None:
@@ -53,9 +99,3 @@ def _ensure_csv_header(csv_path: Path) -> None:
 
     existing_text = csv_path.read_text(encoding="utf-8")
     csv_path.write_text(f"{expected_header}\n{existing_text}", encoding="utf-8")
-
-
-def _join_list(value: object) -> str:
-    if isinstance(value, list):
-        return ", ".join(str(item) for item in value)
-    return str(value)

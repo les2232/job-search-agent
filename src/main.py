@@ -1,6 +1,7 @@
-"""Run the first milestone of the local job search agent."""
+"""Run the local job search agent."""
 
 from pathlib import Path
+import sys
 
 from job_parser import parse_job_text
 from job_scorer import score_job
@@ -12,27 +13,54 @@ SAMPLE_JOB_PATH = PROJECT_ROOT / "data" / "sample_job.txt"
 JOBS_CSV_PATH = PROJECT_ROOT / "data" / "jobs.csv"
 
 
-def main() -> None:
-    job_text = read_sample_job(SAMPLE_JOB_PATH)
+def main(argv: list[str] | None = None, jobs_csv_path: Path = JOBS_CSV_PATH) -> int:
+    args = sys.argv[1:] if argv is None else argv
+    job_path = _get_job_path(args)
+
+    try:
+        job_text = read_job_text(job_path)
+    except FileNotFoundError:
+        print(f"Error: Could not find job posting file: {job_path}")
+        return 1
+    except ValueError as error:
+        print(f"Error: {error}")
+        return 1
+
     job = parse_job_text(job_text)
     score_details = score_job(job)
 
     print_summary(job, score_details)
-    save_job_result(JOBS_CSV_PATH, job, score_details)
-    print(f"\nSaved result to: {JOBS_CSV_PATH}")
+    save_result = save_job_result(jobs_csv_path, job, score_details)
+    print(f"\n{save_result['message']}")
+    return 0
+
+
+def _get_job_path(args: list[str]) -> Path:
+    if not args:
+        return SAMPLE_JOB_PATH
+    return Path(args[0])
 
 
 def read_sample_job(path: Path) -> str:
+    return read_job_text(path)
+
+
+def read_job_text(path: Path) -> str:
     if not path.exists():
-        raise FileNotFoundError(f"Could not find sample job file: {path}")
-    return path.read_text(encoding="utf-8")
+        raise FileNotFoundError(f"Could not find job posting file: {path}")
+
+    job_text = path.read_text(encoding="utf-8")
+    if not job_text.strip():
+        raise ValueError(f"Job posting file is empty: {path}")
+
+    return job_text
 
 
 def print_summary(job: dict[str, str], score_details: dict[str, object]) -> None:
     matched_keywords = _format_list(score_details["matched_keywords"])
     concerns = _format_list(score_details["concerns"])
 
-    print("Job Search Agent - Milestone 1")
+    print("Job Search Agent - Milestone 4")
     print("=" * 30)
     print(f"Title: {job['title']}")
     print(f"Company: {job['company']}")
@@ -51,4 +79,4 @@ def _format_list(value: object) -> str:
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

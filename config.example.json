@@ -1,0 +1,35 @@
+{
+  "starting_score": 50,
+  "positive_keyword_points": 5,
+  "concern_keyword_penalty": 8,
+  "apply_threshold": 75,
+  "maybe_threshold": 60,
+  "positive_keywords": [
+    "python",
+    "sql",
+    "api",
+    "apis",
+    "automation",
+    "dashboard",
+    "dashboards",
+    "data",
+    "git",
+    "linux",
+    "documentation",
+    "troubleshooting",
+    "junior",
+    "entry-level",
+    "remote",
+    "hybrid"
+  ],
+  "concern_keywords": [
+    "senior",
+    "principal",
+    "lead engineer",
+    "8+ years",
+    "10+ years",
+    "sales",
+    "commission",
+    "on-call"
+  ]
+}

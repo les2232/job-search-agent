@@ -1,60 +1,49 @@
 """Score a job posting with simple keyword rules."""
 
 import re
+from typing import Any
+
+from config_loader import BUILT_IN_SCORING_CONFIG, load_scoring_config
 
 
-POSITIVE_KEYWORDS = [
-    "python",
-    "sql",
-    "api",
-    "apis",
-    "automation",
-    "dashboard",
-    "dashboards",
-    "data",
-    "git",
-    "linux",
-    "documentation",
-    "troubleshooting",
-    "junior",
-    "entry-level",
-    "remote",
-    "hybrid",
-]
-
-NEGATIVE_KEYWORDS = [
-    "senior",
-    "principal",
-    "lead engineer",
-    "8+ years",
-    "10+ years",
-    "sales",
-    "commission",
-    "on-call",
-]
+POSITIVE_KEYWORDS = BUILT_IN_SCORING_CONFIG["positive_keywords"]
+NEGATIVE_KEYWORDS = BUILT_IN_SCORING_CONFIG["concern_keywords"]
 
 
-def score_job(job: dict[str, str]) -> dict[str, object]:
+def score_job(
+    job: dict[str, str],
+    scoring_config: dict[str, Any] | None = None,
+) -> dict[str, object]:
     """Return score details for a parsed job."""
+    config = load_scoring_config() if scoring_config is None else scoring_config
     text = job["raw_text"]
-    matched_keywords = _find_keywords(text, POSITIVE_KEYWORDS)
-    concerns = _find_keywords(text, NEGATIVE_KEYWORDS)
+    matched_keywords = _find_keywords(text, config["positive_keywords"])
+    concerns = _find_keywords(text, config["concern_keywords"])
 
-    score = 50 + (len(matched_keywords) * 5) - (len(concerns) * 8)
+    score = (
+        config["starting_score"]
+        + (len(matched_keywords) * config["positive_keyword_points"])
+        - (len(concerns) * config["concern_keyword_penalty"])
+    )
     score = max(0, min(100, score))
 
     return {
         "score": score,
-        "recommendation": get_recommendation(score),
+        "recommendation": get_recommendation(score, config),
         "matched_keywords": matched_keywords,
         "concerns": concerns,
     }
 
 
-def get_recommendation(score: int) -> str:
-    if score >= 75:
+def get_recommendation(
+    score: int,
+    scoring_config: dict[str, Any] | None = None,
+) -> str:
+    config = load_scoring_config() if scoring_config is None else scoring_config
+
+    if score >= config["apply_threshold"]:
         return "Apply"
-    if score >= 60:
+    if score >= config["maybe_threshold"]:
         return "Maybe"
     return "Skip"
 
