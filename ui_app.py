@@ -13,6 +13,7 @@ if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
 from application_generator import generate_application_materials
+from application_packet import generate_application_packet
 from job_parser import parse_job_text
 from job_scorer import score_job
 from tracker import filter_tracked_jobs
@@ -100,6 +101,7 @@ def _show_score_job_tab() -> None:
             st.session_state["score_details"] = score_details
             st.session_state["scored_job_text"] = job_text
             st.session_state.pop("save_message", None)
+            st.session_state.pop("score_application_packet", None)
 
     job = st.session_state.get("scored_job")
     score_details = st.session_state.get("score_details")
@@ -251,6 +253,7 @@ def _show_score_summary(
         st.write(f"Matched keywords: {matched_keywords}")
         st.write(f"Concerns: {concerns}")
         _show_score_explanation(score_details.get("explanation"))
+        _show_application_packet_prompt(score_details)
 
 
 def _show_score_explanation(explanation: object) -> None:
@@ -266,6 +269,59 @@ def _show_score_explanation(explanation: object) -> None:
         "Tailoring suggestions",
         explanation["tailoring_suggestions"],
     )
+
+
+def _show_application_packet_prompt(score_details: dict[str, object]) -> None:
+    st.subheader("Application packet")
+    if st.button("Generate application packet"):
+        profile_text = _read_optional_text(DEFAULT_RESUME_PATH)
+        st.session_state["score_application_packet"] = generate_application_packet(
+            score_details,
+            profile_text,
+        )
+
+    packet = st.session_state.get("score_application_packet")
+    if not isinstance(packet, dict):
+        st.caption(
+            "Generate a reviewable packet with resume focus areas, draft wording, "
+            "a recruiter message, checklist, and risk notes."
+        )
+        return
+
+    st.write(packet["positioning_summary"])
+    st.info(str(packet["apply_recommendation"]))
+    _show_packet_list("Resume focus areas", packet["resume_focus_areas"], expanded=True)
+    _show_packet_list(
+        "Suggested resume bullets",
+        packet["resume_bullet_suggestions"],
+        expanded=True,
+    )
+    _show_packet_list(
+        "Keywords to include honestly",
+        packet["keywords_to_include_honestly"],
+    )
+    _show_packet_list(
+        "Keywords to verify or avoid",
+        packet["keywords_to_avoid_or_verify"],
+    )
+    with st.expander("Cover letter draft"):
+        st.text(packet["cover_letter_draft"])
+    with st.expander("Recruiter message"):
+        st.text(packet["recruiter_message"])
+    _show_packet_list("Application checklist", packet["application_checklist"])
+    _show_packet_list("Risk notes", packet["risk_notes"])
+
+
+def _show_packet_list(label: str, values: object, expanded: bool = False) -> None:
+    if not isinstance(values, list):
+        return
+
+    with st.expander(label, expanded=expanded):
+        if not values:
+            st.caption("None.")
+            return
+        for value in values:
+            st.write(f"- {value}")
 
 
 def _show_explanation_list(label: str, values: object) -> None:
@@ -342,6 +398,17 @@ def _list_packet_dirs() -> list[Path]:
         return []
 
     return sorted(path for path in OUTPUT_DIR.iterdir() if path.is_dir())
+
+
+def _read_optional_text(path: Path) -> str | None:
+    if not path.exists():
+        return None
+
+    text = path.read_text(encoding="utf-8")
+    if not text.strip():
+        return None
+
+    return text
 
 
 def _format_job_label(row: dict[str, str]) -> str:

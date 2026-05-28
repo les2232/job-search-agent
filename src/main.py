@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 
 from application_generator import generate_application_materials
+from application_packet import generate_application_packet
 from job_parser import parse_job_text
 from job_scorer import score_job
 from tracker import filter_tracked_jobs
@@ -17,6 +18,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SAMPLE_JOB_PATH = PROJECT_ROOT / "data" / "sample_job.txt"
 JOBS_CSV_PATH = PROJECT_ROOT / "data" / "jobs.csv"
 OUTPUT_DIR = PROJECT_ROOT / "output"
+DEFAULT_RESUME_PATH = PROJECT_ROOT / "data" / "profile" / "resume_base.md"
 
 
 def main(argv: list[str] | None = None, jobs_csv_path: Path = JOBS_CSV_PATH) -> int:
@@ -30,7 +32,9 @@ def main(argv: list[str] | None = None, jobs_csv_path: Path = JOBS_CSV_PATH) -> 
     if args and args[0] == "repair-tracker":
         return repair_tracker_command(jobs_csv_path)
 
-    job_path = _get_job_path(args)
+    include_packet = "--packet" in args
+    job_args = [arg for arg in args if arg != "--packet"]
+    job_path = _get_job_path(job_args)
 
     try:
         job_text = read_job_text(job_path)
@@ -45,6 +49,11 @@ def main(argv: list[str] | None = None, jobs_csv_path: Path = JOBS_CSV_PATH) -> 
     score_details = score_job(job)
 
     print_summary(job, score_details)
+    if include_packet:
+        profile_text = read_optional_text(DEFAULT_RESUME_PATH)
+        packet = generate_application_packet(score_details, profile_text)
+        print_packet_summary(packet)
+
     save_result = save_job_result(jobs_csv_path, job, score_details)
     print(f"\n{save_result['message']}")
     return 0
@@ -208,6 +217,17 @@ def read_job_text(path: Path) -> str:
     return job_text
 
 
+def read_optional_text(path: Path) -> str | None:
+    if not path.exists():
+        return None
+
+    text = path.read_text(encoding="utf-8")
+    if not text.strip():
+        return None
+
+    return text
+
+
 def print_summary(job: dict[str, str], score_details: dict[str, object]) -> None:
     matched_keywords = _format_list(score_details["matched_keywords"])
     concerns = _format_list(score_details["concerns"])
@@ -241,6 +261,25 @@ def print_explanation(explanation: object) -> None:
         "Tailoring suggestions",
         explanation["tailoring_suggestions"],
     )
+
+
+def print_packet_summary(packet: dict[str, object]) -> None:
+    print()
+    print("Application packet")
+    print("-" * 18)
+    print(packet["positioning_summary"])
+    print(f"Apply recommendation: {packet['apply_recommendation']}")
+    _print_explanation_list("Resume focus areas", packet["resume_focus_areas"])
+    _print_explanation_list(
+        "Keywords to include honestly",
+        packet["keywords_to_include_honestly"],
+    )
+    _print_explanation_list(
+        "Keywords to verify or avoid",
+        packet["keywords_to_avoid_or_verify"],
+    )
+    _print_explanation_list("Risk notes", packet["risk_notes"])
+    print("Full packet details are available in the Streamlit UI.")
 
 
 def _print_explanation_list(label: str, values: object) -> None:

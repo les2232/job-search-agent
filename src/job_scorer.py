@@ -33,6 +33,12 @@ def score_job(
     recommendation = get_recommendation(score, config)
 
     return {
+        "job_metadata": {
+            "title": job.get("title", "Unknown"),
+            "company": job.get("company", "Unknown"),
+            "location": job.get("location", "Unknown"),
+            "work_mode": job.get("work_mode", "Unknown"),
+        },
         "score": score,
         "recommendation": recommendation,
         "matched_keywords": matched_keywords,
