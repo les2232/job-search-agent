@@ -5,6 +5,7 @@ import sys
 
 from application_generator import generate_application_materials
 from application_packet import generate_application_packet
+from application_packet_reader import list_saved_application_packets
 from application_packet_writer import save_application_packet
 from job_parser import parse_job_text
 from job_scorer import score_job
@@ -33,6 +34,8 @@ def main(argv: list[str] | None = None, jobs_csv_path: Path = JOBS_CSV_PATH) -> 
         return update_status_command(args[1:], jobs_csv_path)
     if args and args[0] == "repair-tracker":
         return repair_tracker_command(jobs_csv_path)
+    if args and args[0] == "--list-packets":
+        return list_packets_command(APPLICATIONS_DIR)
 
     include_packet = "--packet" in args
     save_packet = "--save-packet" in args
@@ -147,6 +150,29 @@ def repair_tracker_command(jobs_csv_path: Path) -> int:
     )
     print(f"Duplicate jobs removed: {result['duplicate_jobs_removed']}")
     print(f"Rows written: {result['rows_written']}")
+    return 0
+
+
+def list_packets_command(applications_dir: Path) -> int:
+    packets = list_saved_application_packets(applications_dir)
+    if not packets:
+        print(f"No saved application packets found at: {applications_dir}")
+        return 0
+
+    print(f"Saved Application Packets ({len(packets)})")
+    print("=" * 34)
+    for index, packet in enumerate(packets, start=1):
+        print(f"{index}. {packet['title']} at {packet['company']}")
+        print(f"   Saved: {packet['saved_date']}")
+        print(f"   Location: {packet['location']}")
+        print(f"   Work mode: {packet['work_mode']}")
+        print(f"   Score: {packet['score']}")
+        print(f"   Recommendation: {packet['recommendation']}")
+        print(f"   Apply recommendation: {packet['apply_recommendation']}")
+        print(f"   Matched keywords: {packet['matched_keywords_count']}")
+        print(f"   Concerns: {packet['concern_count']}")
+        print(f"   Folder: {packet['folder_path']}")
+
     return 0
 
 

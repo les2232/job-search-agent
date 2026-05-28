@@ -14,6 +14,10 @@ if str(SRC_PATH) not in sys.path:
 
 from application_generator import generate_application_materials
 from application_packet import generate_application_packet
+from application_packet_reader import (
+    list_saved_application_packets,
+    load_saved_application_packet,
+)
 from application_packet_writer import save_application_packet
 from job_parser import parse_job_text
 from job_scorer import score_job
@@ -35,8 +39,14 @@ def main() -> None:
     st.title("Job Search Agent")
 
     tracked_jobs = read_tracked_jobs(JOBS_CSV_PATH)
-    dashboard_tab, score_tab, tracker_tab, packets_tab = st.tabs(
-        ["Dashboard", "Score a Job", "Tracker", "Application Packets"]
+    dashboard_tab, score_tab, tracker_tab, packets_tab, saved_tab = st.tabs(
+        [
+            "Dashboard",
+            "Score a Job",
+            "Tracker",
+            "Application Packets",
+            "Saved applications",
+        ]
     )
 
     with dashboard_tab:
@@ -50,6 +60,9 @@ def main() -> None:
 
     with packets_tab:
         _show_application_packets_tab()
+
+    with saved_tab:
+        _show_saved_applications_tab()
 
 
 def _show_dashboard(tracked_jobs: list[dict[str, str]]) -> None:
@@ -66,7 +79,10 @@ def _show_dashboard(tracked_jobs: list[dict[str, str]]) -> None:
     metric_cols[0].metric("Tracked jobs", len(tracked_jobs))
     metric_cols[1].metric("Apply + New", apply_new_count)
     metric_cols[2].metric("Follow-ups set", follow_up_count)
-    metric_cols[3].metric("Application packets", len(_list_packet_dirs()))
+    metric_cols[3].metric(
+        "Saved applications",
+        len(list_saved_application_packets(APPLICATIONS_DIR)),
+    )
 
     status_col, recommendation_col = st.columns(2)
     with status_col:
@@ -216,6 +232,76 @@ def _show_application_packets_tab() -> None:
         st.markdown(match_notes_path.read_text(encoding="utf-8"))
     else:
         st.caption("No match_notes.md file found in this packet.")
+
+
+def _show_saved_applications_tab() -> None:
+    st.header("Saved applications")
+
+    saved_packets = list_saved_application_packets(APPLICATIONS_DIR)
+    if not saved_packets:
+        st.info("No saved application packets found yet.")
+        return
+
+    table_rows = [
+        {
+            "saved_date": packet["saved_date"],
+            "title": packet["title"],
+            "company": packet["company"],
+            "location": packet["location"],
+            "work_mode": packet["work_mode"],
+            "score": packet["score"],
+            "recommendation": packet["recommendation"],
+            "apply_recommendation": packet["apply_recommendation"],
+            "matched_keywords": packet["matched_keywords_count"],
+            "concerns": packet["concern_count"],
+            "folder_path": str(packet["folder_path"]),
+        }
+        for packet in saved_packets
+    ]
+    st.dataframe(table_rows, use_container_width=True, hide_index=True)
+
+    packet_options = {
+        _format_saved_packet_label(packet): packet
+        for packet in saved_packets
+    }
+    selected_label = st.selectbox("View packet details", list(packet_options))
+    selected_packet = packet_options[selected_label]
+    packet_details = load_saved_application_packet(selected_packet["folder_path"])
+    if packet_details is None:
+        st.warning("This saved packet could not be loaded.")
+        return
+
+    st.caption(f"Saved folder: {packet_details['folder_path']}")
+    _show_saved_packet_details(packet_details["application_packet"])
+
+
+def _show_saved_packet_details(packet: object) -> None:
+    if not isinstance(packet, dict):
+        st.info("No saved packet details were found.")
+        return
+
+    st.subheader("Packet Details")
+    st.write(packet.get("positioning_summary", "No positioning summary found."))
+    st.info(str(packet.get("apply_recommendation", "No apply recommendation found.")))
+    _show_packet_list("Resume focus areas", packet.get("resume_focus_areas"), expanded=True)
+    _show_packet_list(
+        "Suggested resume bullets",
+        packet.get("resume_bullet_suggestions"),
+    )
+    _show_packet_list(
+        "Keywords to include honestly",
+        packet.get("keywords_to_include_honestly"),
+    )
+    _show_packet_list(
+        "Keywords to verify or avoid",
+        packet.get("keywords_to_avoid_or_verify"),
+    )
+    with st.expander("Cover letter draft"):
+        st.text(str(packet.get("cover_letter_draft", "")))
+    with st.expander("Recruiter message"):
+        st.text(str(packet.get("recruiter_message", "")))
+    _show_packet_list("Application checklist", packet.get("application_checklist"))
+    _show_packet_list("Risk notes", packet.get("risk_notes"))
 
 
 def _get_job_text_input(key_prefix: str) -> str:
@@ -429,6 +515,14 @@ def _format_job_label(row: dict[str, str]) -> str:
     status = row["status"] or "Unknown"
     recommendation = row["recommendation"] or "Unknown"
     return f"{title} at {company} ({status}, {recommendation})"
+
+
+def _format_saved_packet_label(packet: dict[str, object]) -> str:
+    title = packet["title"] or "Unknown title"
+    company = packet["company"] or "Unknown company"
+    saved_date = packet["saved_date"] or "Unknown date"
+    recommendation = packet["recommendation"] or "Unknown"
+    return f"{title} at {company} ({saved_date}, {recommendation})"
 
 
 def _format_list(value: object) -> str:
