@@ -223,6 +223,33 @@ def print_summary(job: dict[str, str], score_details: dict[str, object]) -> None
     print(f"Recommendation: {score_details['recommendation']}")
     print(f"Matched keywords: {matched_keywords}")
     print(f"Concerns: {concerns}")
+    print_explanation(score_details["explanation"])
+
+
+def print_explanation(explanation: object) -> None:
+    if not isinstance(explanation, dict):
+        return
+
+    print()
+    print("Why this score?")
+    print("-" * 15)
+    print(explanation["fit_summary"])
+    _print_explanation_list("Strengths", explanation["strengths"])
+    _print_explanation_list("Gaps", explanation["gaps"])
+    _print_explanation_list("Concerns", explanation["concerns"])
+    _print_explanation_list(
+        "Tailoring suggestions",
+        explanation["tailoring_suggestions"],
+    )
+
+
+def _print_explanation_list(label: str, values: object) -> None:
+    if not isinstance(values, list):
+        return
+
+    print(f"{label}:")
+    for value in values:
+        print(f"- {value}")
 
 
 def _format_list(value: object) -> str:

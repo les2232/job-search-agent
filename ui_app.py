@@ -250,6 +250,31 @@ def _show_score_summary(
         concerns = _format_list(score_details["concerns"])
         st.write(f"Matched keywords: {matched_keywords}")
         st.write(f"Concerns: {concerns}")
+        _show_score_explanation(score_details.get("explanation"))
+
+
+def _show_score_explanation(explanation: object) -> None:
+    if not isinstance(explanation, dict):
+        return
+
+    st.subheader("Why this score?")
+    st.write(explanation["fit_summary"])
+    _show_explanation_list("Strengths", explanation["strengths"])
+    _show_explanation_list("Gaps", explanation["gaps"])
+    _show_explanation_list("Concerns", explanation["concerns"])
+    _show_explanation_list(
+        "Tailoring suggestions",
+        explanation["tailoring_suggestions"],
+    )
+
+
+def _show_explanation_list(label: str, values: object) -> None:
+    if not isinstance(values, list):
+        return
+
+    with st.expander(label, expanded=label in {"Strengths", "Tailoring suggestions"}):
+        for value in values:
+            st.write(f"- {value}")
 
 
 def _show_status_update_controls(filtered_jobs: list[dict[str, str]]) -> None:
