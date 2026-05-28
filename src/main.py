@@ -147,9 +147,11 @@ def generate_application_command(args: list[str]) -> int:
     print("Generated application drafts")
     print("=" * 30)
     print(f"Matching keywords: {_format_list(matching_keywords)}")
+    print(f"Output folder: {result['output_dir']}")
     print(f"Resume draft: {output_paths['resume']}")
     print(f"Cover letter draft: {output_paths['cover_letter']}")
     print(f"Match notes: {output_paths['match_notes']}")
+    print(f"Job posting copy: {output_paths['job_posting']}")
     print()
     print(
         "Draft only. Review carefully before using. "

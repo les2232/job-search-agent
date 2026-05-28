@@ -11,12 +11,14 @@ SRC_PATH = PROJECT_ROOT / "src"
 if str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 
+from application_generator import generate_application_materials
 from job_parser import parse_job_text
 from job_scorer import score_job
 from tracker import read_tracked_jobs, save_job_result
 
 
 JOBS_CSV_PATH = PROJECT_ROOT / "data" / "jobs.csv"
+OUTPUT_DIR = PROJECT_ROOT / "output"
 
 
 def main() -> None:
@@ -51,6 +53,7 @@ def main() -> None:
         else:
             st.info(save_message["message"])
 
+    _show_application_generator(job_text)
     _show_tracked_jobs()
 
 
@@ -68,20 +71,59 @@ def _show_score_summary(
     job: dict[str, str],
     score_details: dict[str, object],
 ) -> None:
-    st.subheader("Score")
-    title_col, company_col, location_col = st.columns(3)
-    title_col.metric("Title", job["title"])
-    company_col.metric("Company", job["company"])
-    location_col.metric("Location", job["location"])
+    with st.container(border=True):
+        st.subheader("Score")
+        title_col, company_col, location_col = st.columns(3)
+        title_col.metric("Title", job["title"])
+        company_col.metric("Company", job["company"])
+        location_col.metric("Location", job["location"])
 
-    score_col, recommendation_col = st.columns(2)
-    score_col.metric("Score", f"{score_details['score']}/100")
-    recommendation_col.metric("Recommendation", str(score_details["recommendation"]))
+        score_col, recommendation_col = st.columns(2)
+        score_col.metric("Score", f"{score_details['score']}/100")
+        recommendation_col.metric(
+            "Recommendation",
+            str(score_details["recommendation"]),
+        )
 
-    matched_keywords = _format_list(score_details["matched_keywords"])
-    concerns = _format_list(score_details["concerns"])
-    st.write(f"Matched keywords: {matched_keywords}")
-    st.write(f"Concerns: {concerns}")
+        matched_keywords = _format_list(score_details["matched_keywords"])
+        concerns = _format_list(score_details["concerns"])
+        st.write(f"Matched keywords: {matched_keywords}")
+        st.write(f"Concerns: {concerns}")
+
+
+def _show_application_generator(job_text: str) -> None:
+    with st.container(border=True):
+        st.subheader("Application Packet")
+        resume_path_text = st.text_input(
+            "Local resume/profile path",
+            value=str(PROJECT_ROOT / "data" / "profile" / "resume_base.md"),
+        )
+
+        if st.button("Generate application packet"):
+            if not job_text.strip():
+                st.error("Paste or upload a job posting before generating a packet.")
+                return
+
+            temp_job_path = OUTPUT_DIR / "_ui_job_posting.txt"
+            try:
+                OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+                temp_job_path.write_text(job_text, encoding="utf-8")
+                result = generate_application_materials(
+                    temp_job_path,
+                    Path(resume_path_text),
+                    OUTPUT_DIR,
+                )
+            except (FileNotFoundError, ValueError) as error:
+                st.error(str(error))
+                return
+            finally:
+                if temp_job_path.exists():
+                    temp_job_path.unlink()
+
+            st.success(f"Generated packet: {result['output_dir']}")
+            st.write("Files:")
+            for output_path in result["output_paths"].values():
+                st.write(str(output_path))
 
 
 def _show_tracked_jobs() -> None:

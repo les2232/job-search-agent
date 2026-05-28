@@ -47,8 +47,9 @@ streamlit run ui_app.py
 ```
 
 The UI lets you paste a job posting, upload a `.txt` posting, score it, save it
-to the local tracker, and view current tracked jobs. Everything remains local;
-`data/jobs.csv` is ignored by Git.
+to the local tracker, generate local application packets, and view current
+tracked jobs. Everything remains local; `data/jobs.csv` and `output/` are
+ignored by Git.
 
 ## Configuration
 
@@ -104,10 +105,25 @@ python .\src\main.py repair-tracker
 It removes duplicate header rows, normalizes rows to the current schema, and
 dedupes repeated jobs by title and company while preserving the first version.
 
-## Application Drafts
+## Application Packets
 
-The `generate-application` command creates Markdown drafts in `output/`:
-`tailored_resume.md`, `cover_letter.md`, and `match_notes.md`.
+The `generate-application` command creates a job-specific folder in `output/`.
+The folder name is based on the company and job title, for example:
+
+```text
+output/example-analytics-studio-junior-python-data-analyst/
+```
+
+Each packet includes:
+
+```text
+tailored_resume.md
+cover_letter.md
+match_notes.md
+job_posting.txt
+```
+
+`job_posting.txt` preserves the original job posting text used for generation.
 
 Draft generation is intentionally conservative. It reads the job posting and
 your local resume/profile, finds configured keywords that appear in both, and

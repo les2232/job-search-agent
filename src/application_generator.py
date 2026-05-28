@@ -1,6 +1,7 @@
 """Generate local Markdown application drafts from user-provided materials."""
 
 from pathlib import Path
+import re
 
 from config_loader import load_scoring_config
 from job_parser import parse_job_text
@@ -15,6 +16,7 @@ OUTPUT_FILENAMES = {
     "resume": "tailored_resume.md",
     "cover_letter": "cover_letter.md",
     "match_notes": "match_notes.md",
+    "job_posting": "job_posting.txt",
 }
 
 
@@ -29,11 +31,13 @@ def generate_application_materials(
     job = parse_job_text(job_text)
     matching_keywords = find_matching_keywords(job_text, resume_text)
 
+    output_dir = output_dir / make_application_slug(job["company"], job["title"])
     output_dir.mkdir(parents=True, exist_ok=True)
     output_paths = {
         name: output_dir / filename for name, filename in OUTPUT_FILENAMES.items()
     }
 
+    output_paths["job_posting"].write_text(job_text, encoding="utf-8")
     output_paths["resume"].write_text(
         build_resume_draft(job, resume_text, matching_keywords),
         encoding="utf-8",
@@ -50,8 +54,17 @@ def generate_application_materials(
     return {
         "job": job,
         "matching_keywords": matching_keywords,
+        "output_dir": output_dir,
         "output_paths": output_paths,
     }
+
+
+def make_application_slug(company: str, title: str) -> str:
+    """Return a safe folder slug for a company and job title."""
+    combined_text = f"{company} {title}".lower()
+    slug = re.sub(r"[^a-z0-9]+", "-", combined_text)
+    slug = re.sub(r"-+", "-", slug).strip("-")
+    return slug or "unknown-job"
 
 
 def find_matching_keywords(
