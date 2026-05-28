@@ -14,6 +14,7 @@ if str(SRC_PATH) not in sys.path:
 
 from application_generator import generate_application_materials
 from application_packet import generate_application_packet
+from application_packet_writer import save_application_packet
 from job_parser import parse_job_text
 from job_scorer import score_job
 from tracker import filter_tracked_jobs
@@ -24,6 +25,7 @@ from tracker import update_job_status
 
 JOBS_CSV_PATH = PROJECT_ROOT / "data" / "jobs.csv"
 OUTPUT_DIR = PROJECT_ROOT / "output"
+APPLICATIONS_DIR = PROJECT_ROOT / "applications"
 DEFAULT_RESUME_PATH = PROJECT_ROOT / "data" / "profile" / "resume_base.md"
 STATUS_OPTIONS = ["New", "Applied", "Interview", "Rejected", "Saved", "Archived"]
 
@@ -102,6 +104,7 @@ def _show_score_job_tab() -> None:
             st.session_state["scored_job_text"] = job_text
             st.session_state.pop("save_message", None)
             st.session_state.pop("score_application_packet", None)
+            st.session_state.pop("saved_score_application_packet", None)
 
     job = st.session_state.get("scored_job")
     score_details = st.session_state.get("score_details")
@@ -279,6 +282,7 @@ def _show_application_packet_prompt(score_details: dict[str, object]) -> None:
             score_details,
             profile_text,
         )
+        st.session_state.pop("saved_score_application_packet", None)
 
     packet = st.session_state.get("score_application_packet")
     if not isinstance(packet, dict):
@@ -290,6 +294,14 @@ def _show_application_packet_prompt(score_details: dict[str, object]) -> None:
 
     st.write(packet["positioning_summary"])
     st.info(str(packet["apply_recommendation"]))
+    if st.button("Save application packet"):
+        save_result = save_application_packet(packet, score_details, APPLICATIONS_DIR)
+        st.session_state["saved_score_application_packet"] = save_result
+
+    saved_packet = st.session_state.get("saved_score_application_packet")
+    if isinstance(saved_packet, dict):
+        st.success(f"Saved packet: {saved_packet['folder_path']}")
+
     _show_packet_list("Resume focus areas", packet["resume_focus_areas"], expanded=True)
     _show_packet_list(
         "Suggested resume bullets",

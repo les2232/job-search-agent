@@ -1,0 +1,275 @@
+"""Save generated application packets to local folders."""
+
+from datetime import date
+import json
+from pathlib import Path
+import re
+
+
+PACKET_FILENAMES = {
+    "job_summary": "job_summary.md",
+    "score_explanation": "score_explanation.md",
+    "resume_tailoring_notes": "resume_tailoring_notes.md",
+    "cover_letter_draft": "cover_letter_draft.md",
+    "recruiter_message": "recruiter_message.txt",
+    "application_checklist": "application_checklist.md",
+    "packet_json": "packet.json",
+}
+
+RAW_TEXT_KEYS = {
+    "raw_text",
+    "job_text",
+    "raw_job_text",
+    "raw_job_description",
+    "job_description",
+}
+
+
+def save_application_packet(
+    packet: dict[str, object],
+    score_result: dict[str, object],
+    output_root: str | Path = "applications",
+    packet_date: date | None = None,
+) -> dict[str, object]:
+    """Save a generated packet without writing the raw job description."""
+    root = Path(output_root)
+    root.mkdir(parents=True, exist_ok=True)
+
+    metadata = _get_metadata(score_result)
+    packet_date = date.today() if packet_date is None else packet_date
+    folder_name = build_packet_folder_name(metadata, packet_date)
+    folder_path = _unique_folder_path(root / folder_name)
+    folder_path.mkdir(parents=True)
+
+    output_paths = {
+        name: folder_path / filename for name, filename in PACKET_FILENAMES.items()
+    }
+
+    output_paths["job_summary"].write_text(
+        _build_job_summary(metadata, score_result),
+        encoding="utf-8",
+    )
+    output_paths["score_explanation"].write_text(
+        _build_score_explanation(score_result),
+        encoding="utf-8",
+    )
+    output_paths["resume_tailoring_notes"].write_text(
+        _build_resume_tailoring_notes(packet),
+        encoding="utf-8",
+    )
+    output_paths["cover_letter_draft"].write_text(
+        str(packet.get("cover_letter_draft", "")),
+        encoding="utf-8",
+    )
+    output_paths["recruiter_message"].write_text(
+        str(packet.get("recruiter_message", "")),
+        encoding="utf-8",
+    )
+    output_paths["application_checklist"].write_text(
+        _build_application_checklist(packet),
+        encoding="utf-8",
+    )
+    output_paths["packet_json"].write_text(
+        json.dumps(
+            _build_packet_payload(packet, score_result, metadata, packet_date),
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+    return {
+        "folder_path": folder_path,
+        "output_paths": output_paths,
+    }
+
+
+def build_packet_folder_name(
+    metadata: dict[str, str],
+    packet_date: date,
+) -> str:
+    company = safe_slug(metadata.get("company"), "unknown-company")
+    title = safe_slug(metadata.get("title"), "unknown-role")
+    return f"{packet_date.isoformat()}_{company}_{title}"
+
+
+def safe_slug(value: object, fallback: str) -> str:
+    if not isinstance(value, str):
+        return fallback
+
+    text = value.strip().lower()
+    if not text or text == "unknown":
+        return fallback
+
+    slug = re.sub(r"[^a-z0-9]+", "-", text)
+    slug = re.sub(r"-+", "-", slug).strip("-")
+    return slug or fallback
+
+
+def _unique_folder_path(folder_path: Path) -> Path:
+    if not folder_path.exists():
+        return folder_path
+
+    counter = 2
+    while True:
+        candidate = folder_path.with_name(f"{folder_path.name}-{counter}")
+        if not candidate.exists():
+            return candidate
+        counter += 1
+
+
+def _get_metadata(score_result: dict[str, object]) -> dict[str, str]:
+    metadata = score_result.get("job_metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+
+    return {
+        "title": _safe_text(metadata.get("title"), "Unknown"),
+        "company": _safe_text(metadata.get("company"), "Unknown"),
+        "location": _safe_text(metadata.get("location"), "Unknown"),
+        "work_mode": _safe_text(metadata.get("work_mode"), "Unknown"),
+    }
+
+
+def _safe_text(value: object, fallback: str = "") -> str:
+    if not isinstance(value, str) or not value.strip():
+        return fallback
+    return value.strip()
+
+
+def _build_job_summary(
+    metadata: dict[str, str],
+    score_result: dict[str, object],
+) -> str:
+    return "\n".join(
+        [
+            "# Job Summary",
+            "",
+            f"- Title: {metadata['title']}",
+            f"- Company: {metadata['company']}",
+            f"- Location: {metadata['location']}",
+            f"- Work mode: {metadata['work_mode']}",
+            f"- Score: {score_result.get('score', 'Unknown')}/100",
+            f"- Recommendation: {score_result.get('recommendation', 'Unknown')}",
+            f"- Matched keywords: {_format_inline_list(score_result.get('matched_keywords'))}",
+            f"- Concerns: {_format_inline_list(score_result.get('concerns'))}",
+            "",
+        ]
+    )
+
+
+def _build_score_explanation(score_result: dict[str, object]) -> str:
+    explanation = score_result.get("explanation")
+    if not isinstance(explanation, dict):
+        return "# Score Explanation\n\nNo score explanation was available.\n"
+
+    return "\n".join(
+        [
+            "# Score Explanation",
+            "",
+            str(explanation.get("fit_summary", "")),
+            "",
+            _format_markdown_list("Strengths", explanation.get("strengths")),
+            _format_markdown_list("Gaps", explanation.get("gaps")),
+            _format_markdown_list("Concerns", explanation.get("concerns")),
+            _format_markdown_list(
+                "Tailoring Suggestions",
+                explanation.get("tailoring_suggestions"),
+            ),
+            "",
+        ]
+    )
+
+
+def _build_resume_tailoring_notes(packet: dict[str, object]) -> str:
+    return "\n".join(
+        [
+            "# Resume Tailoring Notes",
+            "",
+            str(packet.get("positioning_summary", "")),
+            "",
+            f"Apply recommendation: {packet.get('apply_recommendation', '')}",
+            "",
+            _format_markdown_list("Resume Focus Areas", packet.get("resume_focus_areas")),
+            _format_markdown_list(
+                "Suggested Resume Bullets",
+                packet.get("resume_bullet_suggestions"),
+            ),
+            _format_markdown_list(
+                "Keywords To Include Honestly",
+                packet.get("keywords_to_include_honestly"),
+            ),
+            _format_markdown_list(
+                "Keywords To Verify Or Avoid",
+                packet.get("keywords_to_avoid_or_verify"),
+            ),
+            _format_markdown_list("Risk Notes", packet.get("risk_notes")),
+            "",
+        ]
+    )
+
+
+def _build_application_checklist(packet: dict[str, object]) -> str:
+    return "\n".join(
+        [
+            "# Application Checklist",
+            "",
+            _format_markdown_list("Checklist", packet.get("application_checklist")),
+            "",
+            _format_markdown_list("Risk Notes", packet.get("risk_notes")),
+            "",
+        ]
+    )
+
+
+def _build_packet_payload(
+    packet: dict[str, object],
+    score_result: dict[str, object],
+    metadata: dict[str, str],
+    packet_date: date,
+) -> dict[str, object]:
+    return {
+        "created_date": packet_date.isoformat(),
+        "job_metadata": metadata,
+        "score_summary": {
+            "score": score_result.get("score"),
+            "recommendation": score_result.get("recommendation"),
+            "matched_keywords": _as_string_list(score_result.get("matched_keywords")),
+            "missing_keywords": _as_string_list(score_result.get("missing_keywords")),
+            "concerns": _as_string_list(score_result.get("concerns")),
+            "explanation": score_result.get("explanation"),
+        },
+        "application_packet": _sanitize_packet_value(packet),
+    }
+
+
+def _sanitize_packet_value(value: object) -> object:
+    if isinstance(value, dict):
+        return {
+            str(key): _sanitize_packet_value(item)
+            for key, item in value.items()
+            if str(key) not in RAW_TEXT_KEYS
+        }
+    if isinstance(value, list):
+        return [_sanitize_packet_value(item) for item in value]
+    return value
+
+
+def _format_markdown_list(label: str, values: object) -> str:
+    items = _as_string_list(values)
+    if not items:
+        return f"## {label}\n\n- None\n"
+    return f"## {label}\n\n" + "\n".join(f"- {item}" for item in items) + "\n"
+
+
+def _format_inline_list(values: object) -> str:
+    items = _as_string_list(values)
+    if not items:
+        return "None"
+    return ", ".join(items)
+
+
+def _as_string_list(values: object) -> list[str]:
+    if not isinstance(values, list):
+        return []
+    return [str(value) for value in values if str(value).strip()]

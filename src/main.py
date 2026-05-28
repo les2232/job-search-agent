@@ -5,6 +5,7 @@ import sys
 
 from application_generator import generate_application_materials
 from application_packet import generate_application_packet
+from application_packet_writer import save_application_packet
 from job_parser import parse_job_text
 from job_scorer import score_job
 from tracker import filter_tracked_jobs
@@ -18,6 +19,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SAMPLE_JOB_PATH = PROJECT_ROOT / "data" / "sample_job.txt"
 JOBS_CSV_PATH = PROJECT_ROOT / "data" / "jobs.csv"
 OUTPUT_DIR = PROJECT_ROOT / "output"
+APPLICATIONS_DIR = PROJECT_ROOT / "applications"
 DEFAULT_RESUME_PATH = PROJECT_ROOT / "data" / "profile" / "resume_base.md"
 
 
@@ -33,7 +35,15 @@ def main(argv: list[str] | None = None, jobs_csv_path: Path = JOBS_CSV_PATH) -> 
         return repair_tracker_command(jobs_csv_path)
 
     include_packet = "--packet" in args
-    job_args = [arg for arg in args if arg != "--packet"]
+    save_packet = "--save-packet" in args
+    packet_flags = {"--packet", "--save-packet"}
+    job_args = [arg for arg in args if arg not in packet_flags]
+    if any(arg.startswith("--") for arg in job_args) or len(job_args) > 1:
+        print(
+            "Error: Use python .\\src\\main.py [.\\path\\to\\job.txt] "
+            "[--packet] [--save-packet]"
+        )
+        return 1
     job_path = _get_job_path(job_args)
 
     try:
@@ -49,10 +59,18 @@ def main(argv: list[str] | None = None, jobs_csv_path: Path = JOBS_CSV_PATH) -> 
     score_details = score_job(job)
 
     print_summary(job, score_details)
-    if include_packet:
+    if include_packet or save_packet:
         profile_text = read_optional_text(DEFAULT_RESUME_PATH)
         packet = generate_application_packet(score_details, profile_text)
-        print_packet_summary(packet)
+        if include_packet:
+            print_packet_summary(packet)
+        if save_packet:
+            save_result = save_application_packet(
+                packet,
+                score_details,
+                APPLICATIONS_DIR,
+            )
+            print_saved_packet_summary(save_result)
 
     save_result = save_job_result(jobs_csv_path, job, score_details)
     print(f"\n{save_result['message']}")
@@ -280,6 +298,18 @@ def print_packet_summary(packet: dict[str, object]) -> None:
     )
     _print_explanation_list("Risk notes", packet["risk_notes"])
     print("Full packet details are available in the Streamlit UI.")
+
+
+def print_saved_packet_summary(save_result: dict[str, object]) -> None:
+    print()
+    print("Saved application packet")
+    print("-" * 24)
+    print(f"Folder: {save_result['folder_path']}")
+    print("Files:")
+    output_paths = save_result["output_paths"]
+    if isinstance(output_paths, dict):
+        for output_path in output_paths.values():
+            print(f"- {output_path}")
 
 
 def _print_explanation_list(label: str, values: object) -> None:
