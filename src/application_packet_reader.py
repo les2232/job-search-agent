@@ -1,6 +1,6 @@
 """Read saved application packets from local packet folders."""
 
-from datetime import datetime
+from datetime import date, datetime
 import json
 from pathlib import Path
 import re
@@ -84,6 +84,9 @@ def filter_saved_application_packets(
     min_score: int | None = None,
     company_search: str | None = None,
     text_search: str | None = None,
+    needs_attention: bool = False,
+    overdue: bool = False,
+    due_within_days: int | None = None,
 ) -> list[dict[str, object]]:
     """Filter saved application summaries without exposing raw packet data."""
     filtered_packets = []
@@ -112,6 +115,15 @@ def filter_saved_application_packets(
         if text_search and not (
             _contains_text(packet.get("title"), text_search)
             or _contains_text(packet.get("company"), text_search)
+        ):
+            continue
+        if needs_attention and not bool(packet.get("needs_attention")):
+            continue
+        if overdue and not bool(packet.get("is_overdue")):
+            continue
+        if due_within_days is not None and not _is_due_within(
+            packet.get("days_until_next_action"),
+            due_within_days,
         ):
             continue
         filtered_packets.append(_sanitize_summary(packet))
@@ -190,7 +202,24 @@ def update_application_status(
     applied_date: str | None = None,
 ) -> dict[str, object]:
     """Update application tracking fields in packet.json."""
-    if status not in APPLICATION_STATUSES:
+    return update_application_tracking(
+        packet_folder,
+        status=status,
+        notes=notes,
+        applied_date=applied_date,
+    )
+
+
+def update_application_tracking(
+    packet_folder: str | Path,
+    status: str | None = None,
+    notes: str | None = None,
+    applied_date: str | None = None,
+    next_action_date: str | None = None,
+    next_action_note: str | None = None,
+) -> dict[str, object]:
+    """Update application tracking fields in packet.json."""
+    if status is not None and status not in APPLICATION_STATUSES:
         return {
             "updated": False,
             "message": f"Invalid status: {status}",
@@ -220,12 +249,17 @@ def update_application_status(
 
     payload = _sanitize_packet_value(payload)
     tracking = _tracking_value(payload.get("application_tracking"))
-    tracking["status"] = status
+    if status is not None:
+        tracking["status"] = status
     tracking["status_updated_at"] = _current_timestamp()
     if notes is not None:
         tracking["notes"] = notes
     if applied_date is not None:
         tracking["applied_date"] = applied_date or None
+    if next_action_date is not None:
+        tracking["next_action_date"] = next_action_date or None
+    if next_action_note is not None:
+        tracking["next_action_note"] = next_action_note
     payload["application_tracking"] = tracking
 
     packet_path.write_text(
@@ -235,7 +269,7 @@ def update_application_status(
 
     return {
         "updated": True,
-        "message": f"Updated application status to {status}.",
+        "message": f"Updated application tracking for {tracking['status']}.",
         "folder_path": folder_path,
         "application_tracking": tracking,
     }
@@ -249,6 +283,7 @@ def _build_summary(
     score_summary = _dict_value(payload.get("score_summary"))
     application_packet = _dict_value(payload.get("application_packet"))
     application_tracking = _tracking_value(payload.get("application_tracking"))
+    next_action_state = get_next_action_state(application_tracking)
     matched_keywords = _list_value(score_summary.get("matched_keywords"))
     concerns = _list_value(score_summary.get("concerns"))
 
@@ -273,6 +308,12 @@ def _build_summary(
         "applied_date": application_tracking["applied_date"],
         "notes": application_tracking["notes"],
         "next_action": get_next_action(application_tracking["status"]),
+        "next_action_date": application_tracking["next_action_date"],
+        "next_action_note": application_tracking["next_action_note"],
+        "days_until_next_action": next_action_state["days_until_next_action"],
+        "is_overdue": next_action_state["is_overdue"],
+        "needs_attention": next_action_state["needs_attention"],
+        "attention_reason": next_action_state["attention_reason"],
         "matched_keywords_count": len(matched_keywords),
         "concern_count": len(concerns),
     }
@@ -289,7 +330,38 @@ def _tracking_value(value: object) -> dict[str, object]:
         "status_updated_at": _safe_text(tracking.get("status_updated_at"), ""),
         "applied_date": _optional_text(tracking.get("applied_date")),
         "notes": _safe_text(tracking.get("notes"), ""),
+        "next_action_date": _optional_text(tracking.get("next_action_date")),
+        "next_action_note": _safe_text(tracking.get("next_action_note"), ""),
     }
+
+
+def get_next_action_state(
+    tracking: dict[str, object],
+    today: date | None = None,
+) -> dict[str, object]:
+    """Return due/attention state for saved application tracking."""
+    today = date.today() if today is None else today
+    status = _safe_text(tracking.get("status"), DEFAULT_APPLICATION_STATUS)
+    next_action_date_text = _optional_text(tracking.get("next_action_date"))
+
+    if status == "Archived":
+        return _attention_state(None, False, False, "")
+
+    if next_action_date_text:
+        action_date = _parse_date(next_action_date_text)
+        if action_date is not None:
+            days_until = (action_date - today).days
+            if days_until < 0:
+                return _attention_state(days_until, True, True, "Overdue")
+            if days_until <= 3:
+                return _attention_state(days_until, False, True, "Due soon")
+            return _attention_state(days_until, False, False, "")
+
+    if status == "Ready to Apply":
+        return _attention_state(None, False, True, "Ready to apply")
+    if status == "Applied":
+        return _attention_state(None, False, True, "Add a follow-up date")
+    return _attention_state(None, False, False, "")
 
 
 def _date_from_folder_name(folder_name: str) -> str:
@@ -337,6 +409,33 @@ def _date_sort_key(value: object) -> str:
     if re.match(r"^\d{4}-\d{2}-\d{2}$", text):
         return text
     return "0000-00-00"
+
+
+def _is_due_within(value: object, days: int) -> bool:
+    if not isinstance(value, int):
+        return False
+    return 0 <= value <= days
+
+
+def _parse_date(value: str) -> date | None:
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _attention_state(
+    days_until_next_action: int | None,
+    is_overdue: bool,
+    needs_attention: bool,
+    attention_reason: str,
+) -> dict[str, object]:
+    return {
+        "days_until_next_action": days_until_next_action,
+        "is_overdue": is_overdue,
+        "needs_attention": needs_attention,
+        "attention_reason": attention_reason,
+    }
 
 
 def _optional_text(value: object) -> str | None:

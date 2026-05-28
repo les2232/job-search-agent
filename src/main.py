@@ -7,7 +7,7 @@ from application_generator import generate_application_materials
 from application_packet import generate_application_packet
 from application_packet_reader import list_saved_application_packets
 from application_packet_reader import filter_saved_application_packets
-from application_packet_reader import update_application_status
+from application_packet_reader import update_application_tracking
 from application_packet_writer import save_application_packet
 from job_parser import parse_job_text
 from job_scorer import score_job
@@ -164,10 +164,13 @@ def list_packets_command(applications_dir: Path) -> int:
 def list_packets_command_with_args(args: list[str], applications_dir: Path) -> int:
     status = _get_option(args, "--status")
     min_score_text = _get_option(args, "--min-score")
-    if _has_unknown_args(args, {"--status", "--min-score"}):
+    needs_attention = "--needs-attention" in args
+    overdue = "--overdue" in args
+    option_args = [arg for arg in args if arg not in {"--needs-attention", "--overdue"}]
+    if _has_unknown_args(option_args, {"--status", "--min-score"}):
         print(
             "Error: Use python .\\src\\main.py --list-packets "
-            "[--status Tailoring] [--min-score 70]"
+            "[--status Tailoring] [--min-score 70] [--needs-attention] [--overdue]"
         )
         return 1
 
@@ -179,18 +182,24 @@ def list_packets_command_with_args(args: list[str], applications_dir: Path) -> i
         min_score = int(min_score_text)
 
     packets = list_saved_application_packets(applications_dir)
-    packets = filter_saved_application_packets(
-        packets,
-        status=status,
-        min_score=min_score,
-    )
     if not packets:
         print(f"No saved application packets found at: {applications_dir}")
         return 0
 
-    print(f"Saved Application Packets ({len(packets)})")
+    filtered_packets = filter_saved_application_packets(
+        packets,
+        status=status,
+        min_score=min_score,
+        needs_attention=needs_attention,
+        overdue=overdue,
+    )
+    if not filtered_packets:
+        print("No saved application packets matched those filters.")
+        return 0
+
+    print(f"Saved Application Packets ({len(filtered_packets)})")
     print("=" * 34)
-    for index, packet in enumerate(packets, start=1):
+    for index, packet in enumerate(filtered_packets, start=1):
         print(f"{index}. {packet['title']} at {packet['company']}")
         print(f"   Saved: {packet['saved_date']}")
         print(f"   Location: {packet['location']}")
@@ -200,6 +209,10 @@ def list_packets_command_with_args(args: list[str], applications_dir: Path) -> i
         print(f"   Status: {packet['status']}")
         print(f"   Status updated: {packet['status_updated_at'] or 'Not set'}")
         print(f"   Applied date: {packet['applied_date'] or 'Not set'}")
+        print(f"   Next action date: {packet['next_action_date'] or 'Not set'}")
+        print(f"   Next action: {packet['next_action']}")
+        if packet["needs_attention"]:
+            print(f"   Attention: {packet['attention_reason']}")
         print(f"   Apply recommendation: {packet['apply_recommendation']}")
         print(f"   Matched keywords: {packet['matched_keywords_count']}")
         print(f"   Concerns: {packet['concern_count']}")
@@ -213,7 +226,8 @@ def update_packet_status_command(args: list[str]) -> int:
         print(
             "Error: Use python .\\src\\main.py --update-packet-status "
             "\"applications\\folder-name\" --status Applied "
-            "[--notes \"...\"] [--applied-date YYYY-MM-DD]"
+            "[--notes \"...\"] [--applied-date YYYY-MM-DD] "
+            "[--next-action-date YYYY-MM-DD] [--next-action-note \"...\"]"
         )
         return 1
 
@@ -222,23 +236,37 @@ def update_packet_status_command(args: list[str]) -> int:
     status = _get_option(option_args, "--status")
     notes = _get_option(option_args, "--notes")
     applied_date = _get_option(option_args, "--applied-date")
+    next_action_date = _get_option(option_args, "--next-action-date")
+    next_action_note = _get_option(option_args, "--next-action-note")
 
     if (
         status is None
-        or _has_unknown_args(option_args, {"--status", "--notes", "--applied-date"})
+        or _has_unknown_args(
+            option_args,
+            {
+                "--status",
+                "--notes",
+                "--applied-date",
+                "--next-action-date",
+                "--next-action-note",
+            },
+        )
     ):
         print(
             "Error: Use python .\\src\\main.py --update-packet-status "
             "\"applications\\folder-name\" --status Applied "
-            "[--notes \"...\"] [--applied-date YYYY-MM-DD]"
+            "[--notes \"...\"] [--applied-date YYYY-MM-DD] "
+            "[--next-action-date YYYY-MM-DD] [--next-action-note \"...\"]"
         )
         return 1
 
-    result = update_application_status(
+    result = update_application_tracking(
         packet_folder,
         status,
         notes=notes,
         applied_date=applied_date,
+        next_action_date=next_action_date,
+        next_action_note=next_action_note,
     )
     print(result["message"])
     return 0 if result["updated"] else 1

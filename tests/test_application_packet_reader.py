@@ -1,14 +1,17 @@
 import json
+from datetime import date
 from pathlib import Path
 
 from application_packet_reader import (
     count_saved_applications_by_status,
     filter_saved_application_packets,
     get_next_action,
+    get_next_action_state,
     list_saved_application_packets,
     load_saved_application_packet,
     sort_saved_application_packets,
     update_application_status,
+    update_application_tracking,
 )
 
 
@@ -46,6 +49,8 @@ def _packet_payload() -> dict[str, object]:
             "status_updated_at": "2026-05-28T10:00:00",
             "applied_date": None,
             "notes": "Need to tailor resume summary.",
+            "next_action_date": None,
+            "next_action_note": "",
         },
     }
 
@@ -72,6 +77,12 @@ def _summary(
         "applied_date": None,
         "notes": "",
         "next_action": get_next_action(status),
+        "next_action_date": None,
+        "next_action_note": "",
+        "days_until_next_action": None,
+        "is_overdue": False,
+        "needs_attention": False,
+        "attention_reason": "",
         "matched_keywords_count": 2,
         "concern_count": 0,
     }
@@ -110,6 +121,8 @@ def test_list_saved_application_packets_lists_valid_packet(tmp_path: Path) -> No
     assert packets[0]["status"] == "Tailoring"
     assert packets[0]["status_updated_at"] == "2026-05-28T10:00:00"
     assert packets[0]["applied_date"] is None
+    assert packets[0]["next_action_date"] is None
+    assert packets[0]["next_action_note"] == ""
     assert packets[0]["next_action"] == "Finish resume/cover letter edits."
 
 
@@ -179,6 +192,8 @@ def test_saved_application_uses_safe_fallback_text(tmp_path: Path) -> None:
     assert packets[0]["status"] == "Interested"
     assert packets[0]["status_updated_at"] == ""
     assert packets[0]["applied_date"] is None
+    assert packets[0]["next_action_date"] is None
+    assert packets[0]["next_action_note"] == ""
 
 
 def test_old_packet_without_tracking_loads_as_interested(tmp_path: Path) -> None:
@@ -196,6 +211,8 @@ def test_old_packet_without_tracking_loads_as_interested(tmp_path: Path) -> None
     assert packets[0]["status_updated_at"] == ""
     assert packets[0]["applied_date"] is None
     assert packets[0]["notes"] == ""
+    assert packets[0]["next_action_date"] is None
+    assert packets[0]["next_action_note"] == ""
 
 
 def test_update_application_status_writes_valid_status(tmp_path: Path) -> None:
@@ -257,6 +274,25 @@ def test_update_application_status_saves_applied_date(tmp_path: Path) -> None:
     assert packet["application_tracking"]["applied_date"] == "2026-05-28"
 
 
+def test_update_application_tracking_saves_next_action_fields(tmp_path: Path) -> None:
+    folder_path = _write_packet(
+        tmp_path,
+        "2026-05-28_example-analytics-studio_junior-python-analyst",
+        _packet_payload(),
+    )
+
+    update_application_tracking(
+        folder_path,
+        status="Tailoring",
+        next_action_date="2026-06-04",
+        next_action_note="Finish resume tailoring.",
+    )
+    packet = load_saved_application_packet(folder_path)
+
+    assert packet["application_tracking"]["next_action_date"] == "2026-06-04"
+    assert packet["application_tracking"]["next_action_note"] == "Finish resume tailoring."
+
+
 def test_update_application_status_does_not_add_raw_job_description(
     tmp_path: Path,
 ) -> None:
@@ -273,6 +309,58 @@ def test_update_application_status_does_not_add_raw_job_description(
     assert "Private raw job text" not in packet_text
     assert "raw_text" not in packet_text
     assert "raw_job_description" not in packet_text
+
+
+def test_get_next_action_state_marks_overdue() -> None:
+    state = get_next_action_state(
+        {"status": "Tailoring", "next_action_date": "2026-05-27"},
+        today=date(2026, 5, 28),
+    )
+
+    assert state["is_overdue"] is True
+    assert state["needs_attention"] is True
+    assert state["days_until_next_action"] == -1
+
+
+def test_get_next_action_state_marks_due_soon() -> None:
+    state = get_next_action_state(
+        {"status": "Tailoring", "next_action_date": "2026-05-31"},
+        today=date(2026, 5, 28),
+    )
+
+    assert state["is_overdue"] is False
+    assert state["needs_attention"] is True
+    assert state["days_until_next_action"] == 3
+
+
+def test_get_next_action_state_marks_ready_to_apply_without_date() -> None:
+    state = get_next_action_state(
+        {"status": "Ready to Apply"},
+        today=date(2026, 5, 28),
+    )
+
+    assert state["needs_attention"] is True
+    assert state["attention_reason"] == "Ready to apply"
+
+
+def test_get_next_action_state_marks_applied_without_date() -> None:
+    state = get_next_action_state(
+        {"status": "Applied"},
+        today=date(2026, 5, 28),
+    )
+
+    assert state["needs_attention"] is True
+    assert state["attention_reason"] == "Add a follow-up date"
+
+
+def test_get_next_action_state_archived_needs_no_attention() -> None:
+    state = get_next_action_state(
+        {"status": "Archived", "next_action_date": "2026-05-27"},
+        today=date(2026, 5, 28),
+    )
+
+    assert state["is_overdue"] is False
+    assert state["needs_attention"] is False
 
 
 def test_count_saved_applications_by_status() -> None:
@@ -332,6 +420,32 @@ def test_filter_saved_application_packets_by_company_and_title_search() -> None:
 
     assert company_filtered[0]["company"] == "Example Analytics Studio"
     assert text_filtered[0]["title"] == "Desktop Support Specialist"
+
+
+def test_filter_saved_application_packets_by_attention_flags() -> None:
+    packets = [
+        {**_summary(title="Calm"), "needs_attention": False, "is_overdue": False},
+        {
+            **_summary(title="Due"),
+            "needs_attention": True,
+            "is_overdue": False,
+            "days_until_next_action": 3,
+        },
+        {
+            **_summary(title="Late"),
+            "needs_attention": True,
+            "is_overdue": True,
+            "days_until_next_action": -1,
+        },
+    ]
+
+    attention = filter_saved_application_packets(packets, needs_attention=True)
+    overdue = filter_saved_application_packets(packets, overdue=True)
+    due_soon = filter_saved_application_packets(packets, due_within_days=7)
+
+    assert [packet["title"] for packet in attention] == ["Due", "Late"]
+    assert [packet["title"] for packet in overdue] == ["Late"]
+    assert [packet["title"] for packet in due_soon] == ["Due"]
 
 
 def test_get_next_action_returns_status_guidance() -> None:

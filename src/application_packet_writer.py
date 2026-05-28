@@ -237,6 +237,8 @@ def _build_packet_payload(
             "status_updated_at": _current_timestamp(),
             "applied_date": None,
             "notes": "",
+            "next_action_date": None,
+            "next_action_note": "",
         },
         "job_metadata": metadata,
         "score_summary": {

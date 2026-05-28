@@ -22,7 +22,7 @@ from application_packet_reader import (
     list_saved_application_packets,
     load_saved_application_packet,
     sort_saved_application_packets,
-    update_application_status,
+    update_application_tracking,
 )
 from application_packet_writer import save_application_packet
 from job_parser import parse_job_text
@@ -266,6 +266,10 @@ def _show_saved_applications_tab() -> None:
             "status": packet["status"],
             "status_updated_at": packet["status_updated_at"],
             "applied_date": packet["applied_date"],
+            "next_action_date": packet["next_action_date"],
+            "next_action_note": packet["next_action_note"],
+            "needs_attention": packet["needs_attention"],
+            "attention_reason": packet["attention_reason"],
             "apply_recommendation": packet["apply_recommendation"],
             "next_action": packet["next_action"],
             "matched_keywords": packet["matched_keywords_count"],
@@ -339,6 +343,10 @@ def _show_saved_application_filters(
     )
     company_search = search_cols[2].text_input("Company search")
     text_search = search_cols[3].text_input("Title/company search")
+    attention_cols = st.columns(3)
+    needs_attention = attention_cols[0].checkbox("Needs attention")
+    overdue = attention_cols[1].checkbox("Overdue")
+    due_within_7_days = attention_cols[2].checkbox("Due within 7 days")
 
     filtered_packets = filter_saved_application_packets(
         saved_packets,
@@ -355,6 +363,9 @@ def _show_saved_application_filters(
         min_score=int(min_score) if min_score else None,
         company_search=company_search or None,
         text_search=text_search or None,
+        needs_attention=needs_attention,
+        overdue=overdue,
+        due_within_days=7 if due_within_7_days else None,
     )
     return sort_saved_application_packets(filtered_packets, selected_sort)
 
@@ -379,6 +390,15 @@ def _show_saved_packet_status_controls(packet_details: dict[str, object]) -> Non
         value=str(tracking.get("notes") or ""),
         height=90,
     )
+    next_action_date = st.text_input(
+        "Next action date",
+        value=str(tracking.get("next_action_date") or ""),
+        placeholder="YYYY-MM-DD",
+    )
+    next_action_note = st.text_input(
+        "Next action note",
+        value=str(tracking.get("next_action_note") or ""),
+    )
 
     applied_date = None
     if status in {"Applied", "Interview", "Offer", "Rejected", "Archived"}:
@@ -389,11 +409,13 @@ def _show_saved_packet_status_controls(packet_details: dict[str, object]) -> Non
         )
 
     if st.button("Update application status"):
-        result = update_application_status(
+        result = update_application_tracking(
             packet_details["folder_path"],
             status,
             notes=notes,
             applied_date=applied_date,
+            next_action_date=next_action_date,
+            next_action_note=next_action_note,
         )
         if result["updated"]:
             st.success(result["message"])
