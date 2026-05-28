@@ -217,6 +217,7 @@ def print_summary(job: dict[str, str], score_details: dict[str, object]) -> None
     print(f"Title: {job['title']}")
     print(f"Company: {job['company']}")
     print(f"Location: {job['location']}")
+    print(f"Work mode: {job['work_mode']}")
     print()
     print(f"Score: {score_details['score']}/100")
     print(f"Recommendation: {score_details['recommendation']}")

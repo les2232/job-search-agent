@@ -237,6 +237,7 @@ def _show_score_summary(
         title_col.metric("Title", job["title"])
         company_col.metric("Company", job["company"])
         location_col.metric("Location", job["location"])
+        st.caption(f"Work mode: {job.get('work_mode', 'Unknown')}")
 
         score_col, recommendation_col = st.columns(2)
         score_col.metric("Score", f"{score_details['score']}/100")
