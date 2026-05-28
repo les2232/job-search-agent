@@ -205,4 +205,9 @@ def _is_section_heading(line: str) -> bool:
 
 
 def _strip_company_prefix(line: str) -> str:
-    return re.sub(r"^(company|employer|organization)\s*[-–]\s*", "", line, flags=re.IGNORECASE)
+    return re.sub(
+        r"^(company|employer|organization)\s*[-–]\s*",
+        "",
+        line,
+        flags=re.IGNORECASE,
+    )

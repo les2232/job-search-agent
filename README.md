@@ -1,38 +1,24 @@
 # Job Search Agent
 
-A private, local-first Python project for evaluating job postings, scoring role
-fit, and tracking application opportunities with sample data.
+A private, local-first Python app for scoring job postings, explaining role fit,
+generating reviewable application packets, and tracking saved applications.
 
-This milestone reads a plain-text job description, parses basic fields, scores
-it with keyword rules, prints a recommendation, and saves a local CSV result.
+The project is intentionally conservative: it does not scrape job sites, call AI
+or external APIs, store credentials, or auto-apply to jobs.
 
-## Run
+## Quick Start
 
-Run the default sample job:
+Install developer dependencies:
 
 ```powershell
-python .\src\main.py
+python -m pip install -r requirements-dev.txt
 ```
 
-Run a specific `.txt` job posting file:
+Run the sample job through the CLI:
 
 ```powershell
 python .\src\main.py .\data\sample_job.txt
-python .\src\main.py .\path\to\another_job.txt
 ```
-
-Generate local draft application materials from a job posting and your local
-resume/profile file:
-
-```powershell
-python .\src\main.py generate-application .\data\sample_job.txt --resume .\data\profile\resume_base.md
-```
-
-The resume/profile file must be created locally by you. A good starting path is
-`data/profile/resume_base.md`. Keep it factual and include only details you are
-comfortable storing on your own machine.
-
-## Local UI
 
 Install the UI dependency:
 
@@ -46,110 +32,188 @@ Run the local browser UI:
 streamlit run ui_app.py
 ```
 
-The UI is organized as a local job-search cockpit with four tabs:
+## Streamlit UI
 
-- `Dashboard`: tracker totals, status/recommendation counts, follow-up counts,
-  and a rule-based recommended next action.
-- `Score a Job`: paste or upload a `.txt` posting, score it, review matched
-  keywords/concerns, and save it to the tracker.
-- `Tracker`: filter tracked jobs by status or recommendation and update job
-  status.
-- `Application Packets`: generate local job-specific packets and preview
-  existing `match_notes.md` files.
+The UI is the easiest way to use the full workflow.
 
-Everything remains local; `data/jobs.csv`, `data/profile/`, and `output/` are
-ignored by Git.
+- `Dashboard`: high-level tracker and saved-application counts.
+- `Today`: applications that are overdue, due soon, ready to apply, or missing
+  follow-up dates.
+- `Score a Job`: paste or upload a `.txt` job posting, score it, review the
+  explanation, generate an application packet, save it, and save the job to the
+  tracker.
+- `Tracker`: review the local CSV tracker and update basic job statuses.
+- `Application Packets`: older file-based draft generation from a job file and
+  local resume/profile file.
+- `Saved applications`: review saved packets, filter/sort them, update status,
+  notes, applied dates, and next-action dates.
 
-## Configuration
+Everything runs locally on your machine.
 
-Default scoring rules live in `config.example.json`. They include the starting
-score, keyword point values, recommendation thresholds, positive keywords, and
-concern keywords.
+## CLI Usage
 
-To tune scoring for your own local use, create `config.local.json` in the
-project root. If that file exists, the app uses it instead of
-`config.example.json`. Keep `config.local.json` local, do not commit it, and do
-not put sensitive personal data in it.
-
-## Local Tracker
-
-Scored jobs are saved to `data/jobs.csv` with these fields: `title`,
-`company`, `location`, `score`, `recommendation`, `status`, `notes`,
-`source_url`, `date_found`, and `follow_up_date`.
-
-New rows default to `status` of `New`, blank notes, blank source URL, today's
-date for `date_found`, and a blank follow-up date. Before saving, the tracker
-checks for an existing row with the same title and company. If one is already
-tracked, the app skips the duplicate and prints a clear message.
-
-`data/jobs.csv` is local-only and ignored by Git. Do not commit real job leads,
-application notes, source URLs, or personal application details.
-
-List tracked jobs:
+Score the default sample:
 
 ```powershell
-python .\src\main.py list
+python .\src\main.py
 ```
 
-Filter tracked jobs:
+Score a specific job posting:
 
 ```powershell
-python .\src\main.py list --status New
-python .\src\main.py list --recommendation Apply
+python .\src\main.py .\path\to\job.txt
 ```
 
-Update a tracked job's status:
+Show the deterministic application packet in the CLI:
 
 ```powershell
-python .\src\main.py update-status --title "Junior Python Data Analyst" --company "Example Analytics Studio" --status Applied
+python .\src\main.py .\data\sample_job.txt --packet
 ```
 
-Repair the local tracker:
+Save the generated packet under `applications/`:
 
 ```powershell
-python .\src\main.py repair-tracker
+python .\src\main.py .\data\sample_job.txt --packet --save-packet
 ```
 
-`repair-tracker` creates a timestamped backup before modifying `data/jobs.csv`.
-It removes duplicate header rows, normalizes rows to the current schema, and
-dedupes repeated jobs by title and company while preserving the first version.
+List saved packets:
+
+```powershell
+python .\src\main.py --list-packets
+python .\src\main.py --list-packets --status Tailoring
+python .\src\main.py --list-packets --min-score 70
+python .\src\main.py --list-packets --needs-attention
+python .\src\main.py --list-packets --overdue
+```
+
+Update a saved packet:
+
+```powershell
+python .\src\main.py --update-packet-status "applications\folder-name" --status Tailoring --next-action-date 2026-06-04 --next-action-note "Finish resume tailoring."
+```
+
+Show today's attention queue:
+
+```powershell
+python .\src\main.py --today
+```
+
+## Scoring Flow
+
+The app parses job metadata from labeled fields when available:
+
+- title
+- company
+- location
+- work mode
+
+If labels are missing, it falls back to the top lines of the posting. Metadata
+that cannot be found stays `Unknown`.
+
+Scoring rules live in `config.example.json`. You can create an ignored
+`config.local.json` to tune local scoring. The score explanation shows:
+
+- fit summary
+- strengths
+- gaps
+- concerns
+- tailoring suggestions
 
 ## Application Packets
 
-The `generate-application` command creates a job-specific folder in `output/`.
-The folder name is based on the company and job title, for example:
+The `--packet` flow creates deterministic, reviewable guidance from the score
+result and optional local profile text. It includes:
+
+- positioning summary
+- apply recommendation
+- resume focus areas
+- editable resume bullet suggestions
+- keywords to include honestly
+- keywords to verify or avoid
+- short cover letter draft
+- recruiter message
+- application checklist
+- risk notes
+
+Saved packets go under:
 
 ```text
-output/example-analytics-studio-junior-python-data-analyst/
+applications/YYYY-MM-DD_company-slug_title-slug/
 ```
 
-Each packet includes:
+Each saved packet includes:
 
 ```text
-tailored_resume.md
-cover_letter.md
-match_notes.md
-job_posting.txt
+job_summary.md
+score_explanation.md
+resume_tailoring_notes.md
+cover_letter_draft.md
+recruiter_message.txt
+application_checklist.md
+packet.json
 ```
 
-`job_posting.txt` preserves the original job posting text used for generation.
+Saved packets do not include the full raw job description.
 
-Draft generation is intentionally conservative. It reads the job posting and
-your local resume/profile, finds configured keywords that appear in both, and
-creates draft text from that local information. It does not use AI, call APIs,
-scrape websites, or invent experience.
+## Saved Applications
 
-Every generated file includes this warning: "Draft only. Review carefully before
-using. Do not include claims you cannot verify." Review all generated materials
-manually before using them.
+Saved applications are read from `applications/*/packet.json`. The dashboard can
+filter by status, recommendation, apply recommendation, work mode, score,
+company, title/company text, attention state, overdue state, and due dates.
 
-`data/profile/` and `output/` are ignored by Git. Do not commit real resumes,
-profile facts, generated cover letters, or personal application materials.
+Supported saved-application statuses:
 
-## Safety Notes
+- `Interested`
+- `Tailoring`
+- `Ready to Apply`
+- `Applied`
+- `Interview`
+- `Offer`
+- `Rejected`
+- `Archived`
 
-- No real resumes, emails, job history, credentials, or API keys are included.
-- `config.local.json` is ignored; use `config.example.json` for safe examples only.
-- `data/jobs.csv` is generated locally and ignored by Git.
-- `data/profile/` and `output/` are local-only and ignored by Git.
-- The project does not scrape login-protected sites or automate applications.
+Next-action tracking supports:
+
+- next action date
+- next action note
+- applied date
+- notes
+- computed overdue and needs-attention flags
+
+The `Today` view groups applications into overdue, due today, due soon, ready to
+apply, applied without follow-up, and other attention items.
+
+## Local Tracker
+
+The older CSV tracker still exists at `data/jobs.csv`. It is local-only and
+ignored by Git.
+
+```powershell
+python .\src\main.py list
+python .\src\main.py list --status New
+python .\src\main.py list --recommendation Apply
+python .\src\main.py update-status --title "Junior Python Data Analyst" --company "Example Analytics Studio" --status Applied
+python .\src\main.py repair-tracker
+```
+
+## Privacy Notes
+
+Ignored local files and folders include:
+
+- `data/jobs.csv`
+- `data/profile/`
+- `output/`
+- `applications/`
+- `config.local.json`
+- local resume drafts such as `resume_*.md` and `resume_*.txt`
+
+Do not commit real resumes, personal job leads, generated cover letters,
+application notes, credentials, or private profile data.
+
+Generated drafts include the warning:
+
+```text
+Draft only. Review carefully before using. Do not include claims you cannot verify.
+```
+
+Review every generated packet manually before using it.
