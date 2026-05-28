@@ -25,3 +25,7 @@ Thumbs.db
 __pycache__/
 *.pyc
 
+
+# Local resume drafts
+resume_*.md
+resume_*.txt
