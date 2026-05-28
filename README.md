@@ -46,9 +46,18 @@ Run the local browser UI:
 streamlit run ui_app.py
 ```
 
-The UI lets you paste a job posting, upload a `.txt` posting, score it, save it
-to the local tracker, generate local application packets, and view current
-tracked jobs. Everything remains local; `data/jobs.csv` and `output/` are
+The UI is organized as a local job-search cockpit with four tabs:
+
+- `Dashboard`: tracker totals, status/recommendation counts, follow-up counts,
+  and a rule-based recommended next action.
+- `Score a Job`: paste or upload a `.txt` posting, score it, review matched
+  keywords/concerns, and save it to the tracker.
+- `Tracker`: filter tracked jobs by status or recommendation and update job
+  status.
+- `Application Packets`: generate local job-specific packets and preview
+  existing `match_notes.md` files.
+
+Everything remains local; `data/jobs.csv`, `data/profile/`, and `output/` are
 ignored by Git.
 
 ## Configuration

@@ -1,5 +1,6 @@
 """Local Streamlit UI for the job search agent."""
 
+from collections import Counter
 from pathlib import Path
 import sys
 
@@ -14,18 +15,80 @@ if str(SRC_PATH) not in sys.path:
 from application_generator import generate_application_materials
 from job_parser import parse_job_text
 from job_scorer import score_job
-from tracker import read_tracked_jobs, save_job_result
+from tracker import filter_tracked_jobs
+from tracker import read_tracked_jobs
+from tracker import save_job_result
+from tracker import update_job_status
 
 
 JOBS_CSV_PATH = PROJECT_ROOT / "data" / "jobs.csv"
 OUTPUT_DIR = PROJECT_ROOT / "output"
+DEFAULT_RESUME_PATH = PROJECT_ROOT / "data" / "profile" / "resume_base.md"
+STATUS_OPTIONS = ["New", "Applied", "Interview", "Rejected", "Saved", "Archived"]
 
 
 def main() -> None:
     st.set_page_config(page_title="Job Search Agent", layout="wide")
     st.title("Job Search Agent")
 
-    job_text = _get_job_text_input()
+    tracked_jobs = read_tracked_jobs(JOBS_CSV_PATH)
+    dashboard_tab, score_tab, tracker_tab, packets_tab = st.tabs(
+        ["Dashboard", "Score a Job", "Tracker", "Application Packets"]
+    )
+
+    with dashboard_tab:
+        _show_dashboard(tracked_jobs)
+
+    with score_tab:
+        _show_score_job_tab()
+
+    with tracker_tab:
+        _show_tracker_tab(tracked_jobs)
+
+    with packets_tab:
+        _show_application_packets_tab()
+
+
+def _show_dashboard(tracked_jobs: list[dict[str, str]]) -> None:
+    st.header("Dashboard")
+
+    status_counts = Counter(row["status"] or "Unknown" for row in tracked_jobs)
+    recommendation_counts = Counter(
+        row["recommendation"] or "Unknown" for row in tracked_jobs
+    )
+    apply_new_count = _count_apply_new_jobs(tracked_jobs)
+    follow_up_count = sum(1 for row in tracked_jobs if row["follow_up_date"])
+
+    metric_cols = st.columns(4)
+    metric_cols[0].metric("Tracked jobs", len(tracked_jobs))
+    metric_cols[1].metric("Apply + New", apply_new_count)
+    metric_cols[2].metric("Follow-ups set", follow_up_count)
+    metric_cols[3].metric("Application packets", len(_list_packet_dirs()))
+
+    status_col, recommendation_col = st.columns(2)
+    with status_col:
+        st.subheader("By Status")
+        _show_counter(status_counts)
+
+    with recommendation_col:
+        st.subheader("By Recommendation")
+        _show_counter(recommendation_counts)
+
+    st.subheader("Recommended Next Action")
+    next_action = _get_recommended_next_action(
+        tracked_jobs,
+        apply_new_count,
+        follow_up_count,
+    )
+    if tracked_jobs:
+        st.info(next_action)
+    else:
+        st.warning(next_action)
+
+
+def _show_score_job_tab() -> None:
+    st.header("Score a Job")
+    job_text = _get_job_text_input("score")
 
     if st.button("Score job", type="primary"):
         if not job_text.strip():
@@ -35,16 +98,20 @@ def main() -> None:
             score_details = score_job(job)
             st.session_state["scored_job"] = job
             st.session_state["score_details"] = score_details
+            st.session_state["scored_job_text"] = job_text
             st.session_state.pop("save_message", None)
 
     job = st.session_state.get("scored_job")
     score_details = st.session_state.get("score_details")
-    if job and score_details:
-        _show_score_summary(job, score_details)
+    if not job or not score_details:
+        st.caption("Score a posting to review fit and save it to the tracker.")
+        return
 
-        if st.button("Save to tracker"):
-            save_result = save_job_result(JOBS_CSV_PATH, job, score_details)
-            st.session_state["save_message"] = save_result
+    _show_score_summary(job, score_details)
+
+    if st.button("Save to tracker"):
+        save_result = save_job_result(JOBS_CSV_PATH, job, score_details)
+        st.session_state["save_message"] = save_result
 
     save_message = st.session_state.get("save_message")
     if save_message:
@@ -53,13 +120,106 @@ def main() -> None:
         else:
             st.info(save_message["message"])
 
-    _show_application_generator(job_text)
-    _show_tracked_jobs()
+
+def _show_tracker_tab(tracked_jobs: list[dict[str, str]]) -> None:
+    st.header("Tracker")
+
+    if not tracked_jobs:
+        st.info("No tracked jobs yet. Score a posting and save it to start.")
+        return
+
+    status_options = ["All"] + sorted(
+        {row["status"] for row in tracked_jobs if row["status"]}
+    )
+    recommendation_options = ["All"] + sorted(
+        {row["recommendation"] for row in tracked_jobs if row["recommendation"]}
+    )
+
+    filter_cols = st.columns(2)
+    selected_status = filter_cols[0].selectbox("Status", status_options)
+    selected_recommendation = filter_cols[1].selectbox(
+        "Recommendation",
+        recommendation_options,
+    )
+
+    filtered_jobs = filter_tracked_jobs(
+        tracked_jobs,
+        status=None if selected_status == "All" else selected_status,
+        recommendation=(
+            None if selected_recommendation == "All" else selected_recommendation
+        ),
+    )
+
+    high_priority_jobs = [
+        row
+        for row in filtered_jobs
+        if row["recommendation"].lower() == "apply"
+        and row["status"].lower() == "new"
+    ]
+    if high_priority_jobs:
+        st.success(
+            f"{len(high_priority_jobs)} high-priority job(s): Apply recommendation and New status."
+        )
+
+    st.dataframe(filtered_jobs, use_container_width=True, hide_index=True)
+    _show_status_update_controls(filtered_jobs)
 
 
-def _get_job_text_input() -> str:
-    pasted_text = st.text_area("Paste job posting text", height=260)
-    uploaded_file = st.file_uploader("Or upload a .txt job posting", type=["txt"])
+def _show_application_packets_tab() -> None:
+    st.header("Application Packets")
+
+    job_path_text = st.text_input(
+        "Job posting file path",
+        value=str(PROJECT_ROOT / "data" / "sample_job.txt"),
+    )
+    resume_path_text = st.text_input(
+        "Local resume/profile path",
+        value=str(DEFAULT_RESUME_PATH),
+    )
+
+    if st.button("Generate packet", type="primary"):
+        try:
+            result = generate_application_materials(
+                Path(job_path_text),
+                Path(resume_path_text),
+                OUTPUT_DIR,
+            )
+        except (FileNotFoundError, ValueError) as error:
+            st.error(str(error))
+        else:
+            st.success(f"Generated packet: {result['output_dir']}")
+            st.write("Generated files:")
+            for output_path in result["output_paths"].values():
+                st.write(str(output_path))
+
+    packet_dirs = _list_packet_dirs()
+    if not packet_dirs:
+        st.info("No application packets found yet.")
+        return
+
+    st.subheader("Existing Packets")
+    selected_packet = st.selectbox(
+        "Packet folder",
+        packet_dirs,
+        format_func=lambda path: path.name,
+    )
+    st.write(str(selected_packet))
+
+    match_notes_path = selected_packet / "match_notes.md"
+    if match_notes_path.exists():
+        st.subheader("Match Notes Preview")
+        st.markdown(match_notes_path.read_text(encoding="utf-8"))
+    else:
+        st.caption("No match_notes.md file found in this packet.")
+
+
+def _get_job_text_input(key_prefix: str) -> str:
+    pasted_text = st.text_area("Paste job posting text", height=260, key=f"{key_prefix}_text")
+    uploaded_file = st.file_uploader(
+        "Or upload a .txt job posting",
+        type=["txt"],
+        key=f"{key_prefix}_upload",
+    )
 
     if uploaded_file is None:
         return pasted_text
@@ -72,7 +232,7 @@ def _show_score_summary(
     score_details: dict[str, object],
 ) -> None:
     with st.container(border=True):
-        st.subheader("Score")
+        st.subheader("Score Summary")
         title_col, company_col, location_col = st.columns(3)
         title_col.metric("Title", job["title"])
         company_col.metric("Company", job["company"])
@@ -91,50 +251,79 @@ def _show_score_summary(
         st.write(f"Concerns: {concerns}")
 
 
-def _show_application_generator(job_text: str) -> None:
-    with st.container(border=True):
-        st.subheader("Application Packet")
-        resume_path_text = st.text_input(
-            "Local resume/profile path",
-            value=str(PROJECT_ROOT / "data" / "profile" / "resume_base.md"),
-        )
-
-        if st.button("Generate application packet"):
-            if not job_text.strip():
-                st.error("Paste or upload a job posting before generating a packet.")
-                return
-
-            temp_job_path = OUTPUT_DIR / "_ui_job_posting.txt"
-            try:
-                OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-                temp_job_path.write_text(job_text, encoding="utf-8")
-                result = generate_application_materials(
-                    temp_job_path,
-                    Path(resume_path_text),
-                    OUTPUT_DIR,
-                )
-            except (FileNotFoundError, ValueError) as error:
-                st.error(str(error))
-                return
-            finally:
-                if temp_job_path.exists():
-                    temp_job_path.unlink()
-
-            st.success(f"Generated packet: {result['output_dir']}")
-            st.write("Files:")
-            for output_path in result["output_paths"].values():
-                st.write(str(output_path))
-
-
-def _show_tracked_jobs() -> None:
-    st.subheader("Tracked Jobs")
-    tracked_jobs = read_tracked_jobs(JOBS_CSV_PATH)
-
-    if not tracked_jobs:
-        st.caption("No tracked jobs yet.")
+def _show_status_update_controls(filtered_jobs: list[dict[str, str]]) -> None:
+    st.subheader("Update Status")
+    if not filtered_jobs:
+        st.caption("No jobs match the current filters.")
         return
 
-    st.dataframe(tracked_jobs, use_container_width=True, hide_index=True)
+    job_options = {
+        _format_job_label(row): row
+        for row in filtered_jobs
+    }
+    selected_label = st.selectbox("Job", list(job_options))
+    new_status = st.selectbox("New status", STATUS_OPTIONS)
+
+    if st.button("Update status"):
+        selected_job = job_options[selected_label]
+        result = update_job_status(
+            JOBS_CSV_PATH,
+            selected_job["title"],
+            selected_job["company"],
+            new_status,
+        )
+        if result["updated"]:
+            st.success(result["message"])
+            st.rerun()
+        else:
+            st.warning(result["message"])
+
+
+def _show_counter(counter: Counter) -> None:
+    if not counter:
+        st.caption("None yet.")
+        return
+
+    for label, count in sorted(counter.items()):
+        st.write(f"{label}: {count}")
+
+
+def _count_apply_new_jobs(tracked_jobs: list[dict[str, str]]) -> int:
+    return sum(
+        1
+        for row in tracked_jobs
+        if row["recommendation"].lower() == "apply"
+        and row["status"].lower() == "new"
+    )
+
+
+def _get_recommended_next_action(
+    tracked_jobs: list[dict[str, str]],
+    apply_new_count: int,
+    follow_up_count: int,
+) -> str:
+    if not tracked_jobs:
+        return "Score your first job posting."
+    if apply_new_count:
+        return "Review high-match New jobs and generate packets."
+    if follow_up_count:
+        return "Check follow-up dates and update statuses."
+    return "Score another role or update statuses for jobs already in progress."
+
+
+def _list_packet_dirs() -> list[Path]:
+    if not OUTPUT_DIR.exists():
+        return []
+
+    return sorted(path for path in OUTPUT_DIR.iterdir() if path.is_dir())
+
+
+def _format_job_label(row: dict[str, str]) -> str:
+    title = row["title"] or "Unknown title"
+    company = row["company"] or "Unknown company"
+    status = row["status"] or "Unknown"
+    recommendation = row["recommendation"] or "Unknown"
+    return f"{title} at {company} ({status}, {recommendation})"
 
 
 def _format_list(value: object) -> str:
