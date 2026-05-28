@@ -7,6 +7,7 @@ from application_packet_reader import (
     filter_saved_application_packets,
     get_next_action,
     get_next_action_state,
+    get_today_application_queue,
     list_saved_application_packets,
     load_saved_application_packet,
     sort_saved_application_packets,
@@ -494,3 +495,127 @@ def test_filtered_summaries_do_not_return_raw_job_text() -> None:
     assert "Private raw text" not in str(filtered)
     assert "raw_text" not in str(filtered)
     assert "raw_job_description" not in str(filtered)
+
+
+def test_today_queue_groups_overdue_items() -> None:
+    applications = [
+        {
+            **_summary(title="Late"),
+            "needs_attention": True,
+            "is_overdue": True,
+            "days_until_next_action": -1,
+            "attention_reason": "Overdue",
+        }
+    ]
+
+    queue = get_today_application_queue(applications)
+
+    assert queue["overdue"][0]["title"] == "Late"
+
+
+def test_today_queue_groups_due_today_items() -> None:
+    applications = [
+        {
+            **_summary(title="Today"),
+            "needs_attention": True,
+            "is_overdue": False,
+            "days_until_next_action": 0,
+            "attention_reason": "Due soon",
+        }
+    ]
+
+    queue = get_today_application_queue(applications)
+
+    assert queue["due_today"][0]["title"] == "Today"
+
+
+def test_today_queue_groups_due_soon_items() -> None:
+    applications = [
+        {
+            **_summary(title="Soon"),
+            "needs_attention": True,
+            "is_overdue": False,
+            "days_until_next_action": 2,
+            "attention_reason": "Due soon",
+        }
+    ]
+
+    queue = get_today_application_queue(applications)
+
+    assert queue["due_soon"][0]["title"] == "Soon"
+
+
+def test_today_queue_groups_ready_to_apply_without_date() -> None:
+    applications = [
+        {
+            **_summary(title="Ready", status="Ready to Apply"),
+            "needs_attention": True,
+            "attention_reason": "Ready to apply",
+        }
+    ]
+
+    queue = get_today_application_queue(applications)
+
+    assert queue["ready_to_apply_without_date"][0]["title"] == "Ready"
+
+
+def test_today_queue_groups_applied_without_follow_up() -> None:
+    applications = [
+        {
+            **_summary(title="Applied", status="Applied"),
+            "needs_attention": True,
+            "attention_reason": "Add a follow-up date",
+        }
+    ]
+
+    queue = get_today_application_queue(applications)
+
+    assert queue["applied_without_follow_up"][0]["title"] == "Applied"
+
+
+def test_today_queue_excludes_archived_applications() -> None:
+    applications = [
+        {
+            **_summary(title="Archived", status="Archived"),
+            "needs_attention": True,
+            "is_overdue": True,
+            "attention_reason": "Overdue",
+        }
+    ]
+
+    queue = get_today_application_queue(applications)
+
+    assert all(not group for group in queue.values())
+
+
+def test_today_queue_handles_missing_dates() -> None:
+    applications = [
+        {
+            **_summary(title="Missing Date"),
+            "needs_attention": False,
+            "days_until_next_action": None,
+        }
+    ]
+
+    queue = get_today_application_queue(applications)
+
+    assert all(not group for group in queue.values())
+
+
+def test_today_queue_does_not_return_raw_job_text() -> None:
+    applications = [
+        {
+            **_summary(title="Private"),
+            "needs_attention": True,
+            "is_overdue": True,
+            "attention_reason": "Overdue",
+            "raw_text": "Private raw text",
+            "raw_job_description": "Private raw text",
+        }
+    ]
+
+    queue = get_today_application_queue(applications)
+
+    assert "Private raw text" not in str(queue)
+    assert "raw_text" not in str(queue)
+    assert "raw_job_description" not in str(queue)

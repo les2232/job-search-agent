@@ -7,6 +7,7 @@ from application_generator import generate_application_materials
 from application_packet import generate_application_packet
 from application_packet_reader import list_saved_application_packets
 from application_packet_reader import filter_saved_application_packets
+from application_packet_reader import get_today_application_queue
 from application_packet_reader import update_application_tracking
 from application_packet_writer import save_application_packet
 from job_parser import parse_job_text
@@ -40,6 +41,8 @@ def main(argv: list[str] | None = None, jobs_csv_path: Path = JOBS_CSV_PATH) -> 
         return list_packets_command_with_args(args[1:], APPLICATIONS_DIR)
     if args and args[0] == "--update-packet-status":
         return update_packet_status_command(args[1:])
+    if args and args[0] == "--today":
+        return today_command(APPLICATIONS_DIR)
 
     include_packet = "--packet" in args
     save_packet = "--save-packet" in args
@@ -272,6 +275,36 @@ def update_packet_status_command(args: list[str]) -> int:
     return 0 if result["updated"] else 1
 
 
+def today_command(applications_dir: Path) -> int:
+    packets = list_saved_application_packets(applications_dir)
+    queue = get_today_application_queue(packets)
+    total_items = sum(len(items) for items in queue.values())
+
+    print("Today")
+    print("=" * 30)
+    print(f"Items needing attention: {total_items}")
+    print(f"Overdue: {len(queue['overdue'])}")
+    print(f"Due today: {len(queue['due_today'])}")
+    print(f"Due soon: {len(queue['due_soon'])}")
+    print(f"Ready to apply: {len(queue['ready_to_apply_without_date'])}")
+    print(f"Applied without follow-up: {len(queue['applied_without_follow_up'])}")
+
+    if total_items == 0:
+        print("\nNo saved applications need attention today.")
+        return 0
+
+    _print_today_group("Overdue", queue["overdue"])
+    _print_today_group("Due today", queue["due_today"])
+    _print_today_group("Due soon", queue["due_soon"])
+    _print_today_group("Ready to apply", queue["ready_to_apply_without_date"])
+    _print_today_group(
+        "Applied: add follow-up date",
+        queue["applied_without_follow_up"],
+    )
+    _print_today_group("Other needs attention", queue["other_needs_attention"])
+    return 0
+
+
 def generate_application_command(args: list[str]) -> int:
     if len(args) != 3 or args[1] != "--resume":
         print(
@@ -432,6 +465,23 @@ def print_saved_packet_summary(save_result: dict[str, object]) -> None:
     if isinstance(output_paths, dict):
         for output_path in output_paths.values():
             print(f"- {output_path}")
+
+
+def _print_today_group(label: str, applications: list[dict[str, object]]) -> None:
+    if not applications:
+        return
+
+    print()
+    print(label)
+    print("-" * len(label))
+    for application in applications:
+        print(f"- {application['title']} at {application['company']}")
+        print(f"  Status: {application['status']}")
+        print(f"  Score: {application['score']}")
+        print(f"  Next action date: {application['next_action_date'] or 'Not set'}")
+        print(f"  Next action note: {application['next_action_note'] or 'None'}")
+        print(f"  Attention: {application['attention_reason']}")
+        print(f"  Folder: {application['folder_path']}")
 
 
 def _print_explanation_list(label: str, values: object) -> None:

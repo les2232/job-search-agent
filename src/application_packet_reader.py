@@ -168,6 +168,51 @@ def get_next_action(status: object) -> str:
     return NEXT_ACTIONS.get(status_text, NEXT_ACTIONS[DEFAULT_APPLICATION_STATUS])
 
 
+def get_today_application_queue(
+    applications: list[dict[str, object]],
+) -> dict[str, list[dict[str, object]]]:
+    """Group saved applications that need attention today."""
+    queue = {
+        "overdue": [],
+        "due_today": [],
+        "due_soon": [],
+        "ready_to_apply_without_date": [],
+        "applied_without_follow_up": [],
+        "other_needs_attention": [],
+    }
+
+    for application in applications:
+        sanitized_application = _sanitize_summary(application)
+        status = _safe_text(
+            sanitized_application.get("status"),
+            DEFAULT_APPLICATION_STATUS,
+        )
+        if status == "Archived":
+            continue
+        if not bool(sanitized_application.get("needs_attention")):
+            continue
+
+        days_until = sanitized_application.get("days_until_next_action")
+        attention_reason = _safe_text(
+            sanitized_application.get("attention_reason"),
+            "",
+        )
+        if bool(sanitized_application.get("is_overdue")):
+            queue["overdue"].append(sanitized_application)
+        elif days_until == 0:
+            queue["due_today"].append(sanitized_application)
+        elif isinstance(days_until, int) and 1 <= days_until <= 3:
+            queue["due_soon"].append(sanitized_application)
+        elif status == "Ready to Apply" and not sanitized_application.get("next_action_date"):
+            queue["ready_to_apply_without_date"].append(sanitized_application)
+        elif attention_reason == "Add a follow-up date":
+            queue["applied_without_follow_up"].append(sanitized_application)
+        else:
+            queue["other_needs_attention"].append(sanitized_application)
+
+    return queue
+
+
 def load_saved_application_packet(packet_folder: str | Path) -> dict[str, object] | None:
     """Load one saved packet, returning None if it is missing or broken."""
     folder_path = Path(packet_folder)

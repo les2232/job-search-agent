@@ -19,6 +19,7 @@ from application_packet_reader import (
     SORT_OPTIONS,
     count_saved_applications_by_status,
     filter_saved_application_packets,
+    get_today_application_queue,
     list_saved_application_packets,
     load_saved_application_packet,
     sort_saved_application_packets,
@@ -45,9 +46,10 @@ def main() -> None:
     st.title("Job Search Agent")
 
     tracked_jobs = read_tracked_jobs(JOBS_CSV_PATH)
-    dashboard_tab, score_tab, tracker_tab, packets_tab, saved_tab = st.tabs(
+    dashboard_tab, today_tab, score_tab, tracker_tab, packets_tab, saved_tab = st.tabs(
         [
             "Dashboard",
+            "Today",
             "Score a Job",
             "Tracker",
             "Application Packets",
@@ -57,6 +59,9 @@ def main() -> None:
 
     with dashboard_tab:
         _show_dashboard(tracked_jobs)
+
+    with today_tab:
+        _show_today_tab()
 
     with score_tab:
         _show_score_job_tab()
@@ -109,6 +114,58 @@ def _show_dashboard(tracked_jobs: list[dict[str, str]]) -> None:
         st.info(next_action)
     else:
         st.warning(next_action)
+
+
+def _show_today_tab() -> None:
+    st.header("Today")
+    saved_packets = list_saved_application_packets(APPLICATIONS_DIR)
+    if not saved_packets:
+        st.info("No saved applications found yet.")
+        return
+
+    queue = get_today_application_queue(saved_packets)
+    total_items = sum(len(items) for items in queue.values())
+
+    metric_cols = st.columns(5)
+    metric_cols[0].metric("Needs attention", total_items)
+    metric_cols[1].metric("Overdue", len(queue["overdue"]))
+    metric_cols[2].metric("Due today", len(queue["due_today"]))
+    metric_cols[3].metric("Due soon", len(queue["due_soon"]))
+    metric_cols[4].metric(
+        "Applied follow-up",
+        len(queue["applied_without_follow_up"]),
+    )
+    st.metric("Ready to apply", len(queue["ready_to_apply_without_date"]))
+
+    if total_items == 0:
+        st.success("No saved applications need attention today.")
+        return
+
+    _show_today_group("Overdue", queue["overdue"])
+    _show_today_group("Due today", queue["due_today"])
+    _show_today_group("Due soon", queue["due_soon"])
+    _show_today_group("Ready to apply", queue["ready_to_apply_without_date"])
+    _show_today_group(
+        "Applied: add follow-up date",
+        queue["applied_without_follow_up"],
+    )
+    _show_today_group("Other needs attention", queue["other_needs_attention"])
+    st.caption("Update dates and statuses from the Saved applications tab.")
+
+
+def _show_today_group(label: str, applications: list[dict[str, object]]) -> None:
+    if not applications:
+        return
+
+    with st.expander(f"{label} ({len(applications)})", expanded=True):
+        for application in applications:
+            st.write(f"**{application['title']}** at {application['company']}")
+            st.write(f"Status: {application['status']} | Score: {application['score']}")
+            st.write(f"Next action date: {application['next_action_date'] or 'Not set'}")
+            st.write(f"Next action note: {application['next_action_note'] or 'None'}")
+            st.write(f"Attention: {application['attention_reason']}")
+            st.caption(str(application["folder_path"]))
+            st.divider()
 
 
 def _show_score_job_tab() -> None:
