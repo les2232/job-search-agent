@@ -28,6 +28,9 @@ from application_packet_reader import (
 from application_packet_writer import save_application_packet
 from job_parser import parse_job_text
 from job_scorer import score_job
+from profile_manager import DEFAULT_PROFILE_ID
+from profile_manager import list_profiles
+from profile_manager import profile_applications_dir
 from tracker import filter_tracked_jobs
 from tracker import read_tracked_jobs
 from tracker import save_job_result
@@ -38,12 +41,21 @@ JOBS_CSV_PATH = PROJECT_ROOT / "data" / "jobs.csv"
 OUTPUT_DIR = PROJECT_ROOT / "output"
 APPLICATIONS_DIR = PROJECT_ROOT / "applications"
 DEFAULT_RESUME_PATH = PROJECT_ROOT / "data" / "profile" / "resume_base.md"
+PROFILES_ROOT = PROJECT_ROOT / "profiles"
+LOCAL_PROFILES_ROOT = PROJECT_ROOT / "local_profiles"
 STATUS_OPTIONS = ["New", "Applied", "Interview", "Rejected", "Saved", "Archived"]
 
 
 def main() -> None:
     st.set_page_config(page_title="Job Search Agent", layout="wide")
     st.title("Job Search Agent")
+
+    selected_profile = _show_profile_selector()
+    selected_applications_dir = profile_applications_dir(
+        APPLICATIONS_DIR,
+        selected_profile,
+    )
+    legacy_root = _legacy_root_for_profile(selected_profile)
 
     tracked_jobs = read_tracked_jobs(JOBS_CSV_PATH)
     dashboard_tab, today_tab, score_tab, tracker_tab, packets_tab, saved_tab = st.tabs(
@@ -58,25 +70,30 @@ def main() -> None:
     )
 
     with dashboard_tab:
-        _show_dashboard(tracked_jobs)
+        _show_dashboard(tracked_jobs, selected_profile, selected_applications_dir, legacy_root)
 
     with today_tab:
-        _show_today_tab()
+        _show_today_tab(selected_profile, selected_applications_dir, legacy_root)
 
     with score_tab:
-        _show_score_job_tab()
+        _show_score_job_tab(selected_profile, selected_applications_dir)
 
     with tracker_tab:
         _show_tracker_tab(tracked_jobs)
 
     with packets_tab:
-        _show_application_packets_tab()
+        _show_application_packets_tab(selected_profile)
 
     with saved_tab:
-        _show_saved_applications_tab()
+        _show_saved_applications_tab(selected_profile, selected_applications_dir, legacy_root)
 
 
-def _show_dashboard(tracked_jobs: list[dict[str, str]]) -> None:
+def _show_dashboard(
+    tracked_jobs: list[dict[str, str]],
+    profile: dict[str, object],
+    applications_dir: Path,
+    legacy_root: Path | None,
+) -> None:
     st.header("Dashboard")
 
     status_counts = Counter(row["status"] or "Unknown" for row in tracked_jobs)
@@ -92,8 +109,9 @@ def _show_dashboard(tracked_jobs: list[dict[str, str]]) -> None:
     metric_cols[2].metric("Follow-ups set", follow_up_count)
     metric_cols[3].metric(
         "Saved applications",
-        len(list_saved_application_packets(APPLICATIONS_DIR)),
+        len(list_saved_application_packets(applications_dir, legacy_root=legacy_root)),
     )
+    st.caption(f"Saved application metrics use profile: {profile['display_name']}")
 
     status_col, recommendation_col = st.columns(2)
     with status_col:
@@ -116,9 +134,14 @@ def _show_dashboard(tracked_jobs: list[dict[str, str]]) -> None:
         st.warning(next_action)
 
 
-def _show_today_tab() -> None:
+def _show_today_tab(
+    profile: dict[str, object],
+    applications_dir: Path,
+    legacy_root: Path | None,
+) -> None:
     st.header("Today")
-    saved_packets = list_saved_application_packets(APPLICATIONS_DIR)
+    st.caption(f"Profile: {profile['display_name']}")
+    saved_packets = list_saved_application_packets(applications_dir, legacy_root=legacy_root)
     if not saved_packets:
         st.info("No saved applications found yet.")
         return
@@ -168,8 +191,12 @@ def _show_today_group(label: str, applications: list[dict[str, object]]) -> None
             st.divider()
 
 
-def _show_score_job_tab() -> None:
+def _show_score_job_tab(
+    profile: dict[str, object],
+    applications_dir: Path,
+) -> None:
     st.header("Score a Job")
+    st.caption(f"Scoring with profile: {profile['display_name']}")
     job_text = _get_job_text_input("score")
 
     if st.button("Score job", type="primary"):
@@ -191,7 +218,7 @@ def _show_score_job_tab() -> None:
         st.caption("Score a posting to review fit and save it to the tracker.")
         return
 
-    _show_score_summary(job, score_details)
+    _show_score_summary(job, score_details, profile, applications_dir)
 
     if st.button("Save to tracker"):
         save_result = save_job_result(JOBS_CSV_PATH, job, score_details)
@@ -249,7 +276,7 @@ def _show_tracker_tab(tracked_jobs: list[dict[str, str]]) -> None:
     _show_status_update_controls(filtered_jobs)
 
 
-def _show_application_packets_tab() -> None:
+def _show_application_packets_tab(profile: dict[str, object]) -> None:
     st.header("Application Packets")
 
     job_path_text = st.text_input(
@@ -258,7 +285,7 @@ def _show_application_packets_tab() -> None:
     )
     resume_path_text = st.text_input(
         "Local resume/profile path",
-        value=str(DEFAULT_RESUME_PATH),
+        value=str(profile.get("resume_path") or DEFAULT_RESUME_PATH),
     )
 
     if st.button("Generate packet", type="primary"):
@@ -297,10 +324,15 @@ def _show_application_packets_tab() -> None:
         st.caption("No match_notes.md file found in this packet.")
 
 
-def _show_saved_applications_tab() -> None:
+def _show_saved_applications_tab(
+    profile: dict[str, object],
+    applications_dir: Path,
+    legacy_root: Path | None,
+) -> None:
     st.header("Saved applications")
+    st.caption(f"Profile: {profile['display_name']}")
 
-    saved_packets = list_saved_application_packets(APPLICATIONS_DIR)
+    saved_packets = list_saved_application_packets(applications_dir, legacy_root=legacy_root)
     if not saved_packets:
         st.info("No saved application packets found yet.")
         return
@@ -510,6 +542,39 @@ def _show_saved_packet_details(packet: object) -> None:
     _show_packet_list("Risk notes", packet.get("risk_notes"))
 
 
+def _show_profile_selector() -> dict[str, object]:
+    profiles = list_profiles(PROFILES_ROOT, LOCAL_PROFILES_ROOT)
+    if not profiles:
+        st.error("No profiles found. Add profiles/default/profile.json or a local profile.")
+        st.stop()
+
+    st.subheader("Candidate Profile")
+    profile_options = {
+        _format_profile_label(profile): profile
+        for profile in profiles
+    }
+    selected_label = st.selectbox("Profile", list(profile_options))
+    profile = profile_options[selected_label]
+
+    st.caption(f"Profile ID: {profile['profile_id']} | Source: {profile['source']}")
+    st.caption(f"Profile path: {profile['profile_path']}")
+    if profile.get("is_default") and not profile.get("is_local"):
+        st.warning(
+            "You are using the generic default profile. Put real private profiles "
+            "under local_profiles/ so resumes and saved applications stay separate."
+        )
+    elif profile.get("is_local"):
+        st.success("Using an ignored local profile.")
+    if not profile.get("resume_text"):
+        st.info("This profile does not have resume_base.md text yet.")
+
+    if st.session_state.get("active_profile_id") != profile["profile_id"]:
+        st.session_state["active_profile_id"] = profile["profile_id"]
+        st.session_state.pop("score_application_packet", None)
+        st.session_state.pop("saved_score_application_packet", None)
+    return profile
+
+
 def _get_job_text_input(key_prefix: str) -> str:
     pasted_text = st.text_area("Paste job posting text", height=260, key=f"{key_prefix}_text")
     uploaded_file = st.file_uploader(
@@ -527,6 +592,8 @@ def _get_job_text_input(key_prefix: str) -> str:
 def _show_score_summary(
     job: dict[str, str],
     score_details: dict[str, object],
+    profile: dict[str, object],
+    applications_dir: Path,
 ) -> None:
     with st.container(border=True):
         st.subheader("Score Summary")
@@ -548,7 +615,7 @@ def _show_score_summary(
         st.write(f"Matched keywords: {matched_keywords}")
         st.write(f"Concerns: {concerns}")
         _show_score_explanation(score_details.get("explanation"))
-        _show_application_packet_prompt(score_details)
+        _show_application_packet_prompt(score_details, profile, applications_dir)
 
 
 def _show_score_explanation(explanation: object) -> None:
@@ -566,13 +633,16 @@ def _show_score_explanation(explanation: object) -> None:
     )
 
 
-def _show_application_packet_prompt(score_details: dict[str, object]) -> None:
+def _show_application_packet_prompt(
+    score_details: dict[str, object],
+    profile: dict[str, object],
+    applications_dir: Path,
+) -> None:
     st.subheader("Application packet")
     if st.button("Generate application packet"):
-        profile_text = _read_optional_text(DEFAULT_RESUME_PATH)
         st.session_state["score_application_packet"] = generate_application_packet(
             score_details,
-            profile_text,
+            profile.get("resume_text"),
         )
         st.session_state.pop("saved_score_application_packet", None)
 
@@ -587,7 +657,7 @@ def _show_application_packet_prompt(score_details: dict[str, object]) -> None:
     st.write(packet["positioning_summary"])
     st.info(str(packet["apply_recommendation"]))
     if st.button("Save application packet"):
-        save_result = save_application_packet(packet, score_details, APPLICATIONS_DIR)
+        save_result = save_application_packet(packet, score_details, applications_dir)
         st.session_state["saved_score_application_packet"] = save_result
 
     saved_packet = st.session_state.get("saved_score_application_packet")
@@ -729,6 +799,19 @@ def _format_saved_packet_label(packet: dict[str, object]) -> str:
     saved_date = packet["saved_date"] or "Unknown date"
     status = packet["status"] or "Interested"
     return f"{title} at {company} ({saved_date}, {status})"
+
+
+def _format_profile_label(profile: dict[str, object]) -> str:
+    label = f"{profile['display_name']} ({profile['profile_id']})"
+    if profile.get("is_local"):
+        return f"{label} - local"
+    return label
+
+
+def _legacy_root_for_profile(profile: dict[str, object]) -> Path | None:
+    if profile.get("profile_id") == DEFAULT_PROFILE_ID:
+        return APPLICATIONS_DIR
+    return None
 
 
 def _format_list(value: object) -> str:

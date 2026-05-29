@@ -36,6 +36,10 @@ streamlit run ui_app.py
 
 The UI is the easiest way to use the full workflow.
 
+Choose a candidate profile at the top of the app before scoring or reviewing
+saved applications. The selected profile controls which resume/profile text is
+used for packet generation and which saved application folders are shown.
+
 - `Dashboard`: high-level tracker and saved-application counts.
 - `Today`: applications that are overdue, due soon, ready to apply, or missing
   follow-up dates.
@@ -62,24 +66,28 @@ Score a specific job posting:
 
 ```powershell
 python .\src\main.py .\path\to\job.txt
+python .\src\main.py .\path\to\job.txt --profile default
 ```
 
 Show the deterministic application packet in the CLI:
 
 ```powershell
 python .\src\main.py .\data\sample_job.txt --packet
+python .\src\main.py .\data\sample_job.txt --profile default --packet
 ```
 
 Save the generated packet under `applications/`:
 
 ```powershell
 python .\src\main.py .\data\sample_job.txt --packet --save-packet
+python .\src\main.py .\data\sample_job.txt --profile default --packet --save-packet
 ```
 
 List saved packets:
 
 ```powershell
 python .\src\main.py --list-packets
+python .\src\main.py --list-packets --profile default
 python .\src\main.py --list-packets --status Tailoring
 python .\src\main.py --list-packets --min-score 70
 python .\src\main.py --list-packets --needs-attention
@@ -96,7 +104,49 @@ Show today's attention queue:
 
 ```powershell
 python .\src\main.py --today
+python .\src\main.py --today --profile default
 ```
+
+## Profiles
+
+Profiles keep different people's resume notes and saved application packets
+separate.
+
+The committed demo profile lives at:
+
+```text
+profiles/default/
+  profile.json
+  resume_base.md
+```
+
+Use it for testing only. For real private profiles, create ignored local folders:
+
+```text
+local_profiles/<profile_id>/
+  profile.json
+  resume_base.md
+```
+
+Example `profile.json`:
+
+```json
+{
+  "profile_id": "leslie",
+  "display_name": "Leslie",
+  "target_roles": ["IT Support", "Technical Support"],
+  "notes": "Private local profile."
+}
+```
+
+Saved application packets are profile-specific:
+
+```text
+applications/<profile_id>/YYYY-MM-DD_company-slug_title-slug/
+```
+
+Existing legacy packets directly under `applications/` are still shown for the
+`default` profile so older local packets remain visible.
 
 ## Scoring Flow
 
@@ -138,7 +188,7 @@ result and optional local profile text. It includes:
 Saved packets go under:
 
 ```text
-applications/YYYY-MM-DD_company-slug_title-slug/
+applications/<profile_id>/YYYY-MM-DD_company-slug_title-slug/
 ```
 
 Each saved packet includes:
@@ -202,6 +252,7 @@ Ignored local files and folders include:
 
 - `data/jobs.csv`
 - `data/profile/`
+- `local_profiles/`
 - `output/`
 - `applications/`
 - `config.local.json`

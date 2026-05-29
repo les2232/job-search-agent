@@ -51,3 +51,13 @@ def test_main_list_prints_tracked_jobs(tmp_path: Path, capsys) -> None:
     assert exit_code == 0
     assert "Junior Python Analyst at Example Studio" in output
     assert "Recommendation: Apply" in output
+
+
+def test_main_profile_option_requires_value(tmp_path: Path, capsys) -> None:
+    jobs_csv_path = tmp_path / "jobs.csv"
+
+    exit_code = main(["--profile"], jobs_csv_path=jobs_csv_path)
+
+    assert exit_code == 1
+    assert "--profile requires a profile id" in capsys.readouterr().out
+    assert not jobs_csv_path.exists()

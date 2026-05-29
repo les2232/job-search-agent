@@ -1,0 +1,6 @@
+{
+  "profile_id": "default",
+  "display_name": "Default Profile",
+  "target_roles": [],
+  "notes": "Generic demo profile for local testing. Put real private profiles under local_profiles/."
+}

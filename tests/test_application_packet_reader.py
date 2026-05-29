@@ -619,3 +619,72 @@ def test_today_queue_does_not_return_raw_job_text() -> None:
     assert "Private raw text" not in str(queue)
     assert "raw_text" not in str(queue)
     assert "raw_job_description" not in str(queue)
+
+
+def test_saved_packets_can_be_listed_by_profile(tmp_path: Path) -> None:
+    applications_root = tmp_path / "applications"
+    default_root = applications_root / "default"
+    other_root = applications_root / "other"
+    _write_packet(
+        default_root,
+        "2026-05-28_example-analytics-studio_junior-python-analyst",
+        _packet_payload(),
+    )
+    other_payload = _packet_payload()
+    other_payload["job_metadata"]["company"] = "Other Studio"
+    _write_packet(
+        other_root,
+        "2026-05-28_other-studio_junior-python-analyst",
+        other_payload,
+    )
+
+    packets = list_saved_application_packets(default_root)
+
+    assert len(packets) == 1
+    assert packets[0]["company"] == "Example Analytics Studio"
+
+
+def test_legacy_application_folders_can_be_included_for_default_profile(
+    tmp_path: Path,
+) -> None:
+    applications_root = tmp_path / "applications"
+    default_root = applications_root / "default"
+    _write_packet(
+        applications_root,
+        "2026-05-27_legacy-company_legacy-role",
+        _packet_payload(),
+    )
+    profile_payload = _packet_payload()
+    profile_payload["job_metadata"]["company"] = "Profile Company"
+    _write_packet(
+        default_root,
+        "2026-05-28_profile-company_profile-role",
+        profile_payload,
+    )
+
+    packets = list_saved_application_packets(
+        default_root,
+        legacy_root=applications_root,
+    )
+
+    companies = {packet["company"] for packet in packets}
+    assert companies == {"Example Analytics Studio", "Profile Company"}
+
+
+def test_today_queue_respects_selected_profile_root(tmp_path: Path) -> None:
+    applications_root = tmp_path / "applications"
+    default_root = applications_root / "default"
+    other_root = applications_root / "other"
+    default_payload = _packet_payload()
+    default_payload["application_tracking"]["status"] = "Ready to Apply"
+    other_payload = _packet_payload()
+    other_payload["job_metadata"]["company"] = "Other Studio"
+    other_payload["application_tracking"]["status"] = "Ready to Apply"
+    _write_packet(default_root, "2026-05-28_default_ready", default_payload)
+    _write_packet(other_root, "2026-05-28_other_ready", other_payload)
+
+    packets = list_saved_application_packets(default_root)
+    queue = get_today_application_queue(packets)
+
+    assert len(queue["ready_to_apply_without_date"]) == 1
+    assert queue["ready_to_apply_without_date"][0]["company"] == "Example Analytics Studio"

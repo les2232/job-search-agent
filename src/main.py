@@ -12,6 +12,9 @@ from application_packet_reader import update_application_tracking
 from application_packet_writer import save_application_packet
 from job_parser import parse_job_text
 from job_scorer import score_job
+from profile_manager import DEFAULT_PROFILE_ID
+from profile_manager import load_profile
+from profile_manager import profile_applications_dir
 from tracker import filter_tracked_jobs
 from tracker import read_tracked_jobs
 from tracker import repair_tracker
@@ -25,6 +28,8 @@ JOBS_CSV_PATH = PROJECT_ROOT / "data" / "jobs.csv"
 OUTPUT_DIR = PROJECT_ROOT / "output"
 APPLICATIONS_DIR = PROJECT_ROOT / "applications"
 DEFAULT_RESUME_PATH = PROJECT_ROOT / "data" / "profile" / "resume_base.md"
+PROFILES_ROOT = PROJECT_ROOT / "profiles"
+LOCAL_PROFILES_ROOT = PROJECT_ROOT / "local_profiles"
 
 
 def main(argv: list[str] | None = None, jobs_csv_path: Path = JOBS_CSV_PATH) -> int:
@@ -42,16 +47,20 @@ def main(argv: list[str] | None = None, jobs_csv_path: Path = JOBS_CSV_PATH) -> 
     if args and args[0] == "--update-packet-status":
         return update_packet_status_command(args[1:])
     if args and args[0] == "--today":
-        return today_command(APPLICATIONS_DIR)
+        return today_command(args[1:], APPLICATIONS_DIR)
 
     include_packet = "--packet" in args
     save_packet = "--save-packet" in args
     packet_flags = {"--packet", "--save-packet"}
-    job_args = [arg for arg in args if arg not in packet_flags]
+    profile = _load_profile_from_args(args)
+    if profile is None:
+        return 1
+    profile_args = _strip_profile_option(args)
+    job_args = [arg for arg in profile_args if arg not in packet_flags]
     if any(arg.startswith("--") for arg in job_args) or len(job_args) > 1:
         print(
             "Error: Use python .\\src\\main.py [.\\path\\to\\job.txt] "
-            "[--packet] [--save-packet]"
+            "[--profile default] [--packet] [--save-packet]"
         )
         return 1
     job_path = _get_job_path(job_args)
@@ -68,9 +77,10 @@ def main(argv: list[str] | None = None, jobs_csv_path: Path = JOBS_CSV_PATH) -> 
     job = parse_job_text(job_text)
     score_details = score_job(job)
 
+    print_profile_summary(profile)
     print_summary(job, score_details)
     if include_packet or save_packet:
-        profile_text = read_optional_text(DEFAULT_RESUME_PATH)
+        profile_text = profile.get("resume_text")
         packet = generate_application_packet(score_details, profile_text)
         if include_packet:
             print_packet_summary(packet)
@@ -78,7 +88,7 @@ def main(argv: list[str] | None = None, jobs_csv_path: Path = JOBS_CSV_PATH) -> 
             save_result = save_application_packet(
                 packet,
                 score_details,
-                APPLICATIONS_DIR,
+                profile_applications_dir(APPLICATIONS_DIR, profile),
             )
             print_saved_packet_summary(save_result)
 
@@ -165,15 +175,22 @@ def list_packets_command(applications_dir: Path) -> int:
 
 
 def list_packets_command_with_args(args: list[str], applications_dir: Path) -> int:
-    status = _get_option(args, "--status")
-    min_score_text = _get_option(args, "--min-score")
-    needs_attention = "--needs-attention" in args
-    overdue = "--overdue" in args
-    option_args = [arg for arg in args if arg not in {"--needs-attention", "--overdue"}]
+    profile = _load_profile_from_args(args)
+    if profile is None:
+        return 1
+    profile_args = _strip_profile_option(args)
+    status = _get_option(profile_args, "--status")
+    min_score_text = _get_option(profile_args, "--min-score")
+    needs_attention = "--needs-attention" in profile_args
+    overdue = "--overdue" in profile_args
+    option_args = [
+        arg for arg in profile_args if arg not in {"--needs-attention", "--overdue"}
+    ]
     if _has_unknown_args(option_args, {"--status", "--min-score"}):
         print(
             "Error: Use python .\\src\\main.py --list-packets "
-            "[--status Tailoring] [--min-score 70] [--needs-attention] [--overdue]"
+            "[--profile default] [--status Tailoring] [--min-score 70] "
+            "[--needs-attention] [--overdue]"
         )
         return 1
 
@@ -184,9 +201,14 @@ def list_packets_command_with_args(args: list[str], applications_dir: Path) -> i
             return 1
         min_score = int(min_score_text)
 
-    packets = list_saved_application_packets(applications_dir)
+    profile_dir = profile_applications_dir(applications_dir, profile)
+    packets = list_saved_application_packets(
+        profile_dir,
+        legacy_root=_legacy_root_for_profile(profile, applications_dir),
+    )
     if not packets:
-        print(f"No saved application packets found at: {applications_dir}")
+        print(f"No saved application packets found for profile: {profile['display_name']}")
+        print(f"Looked in: {profile_dir}")
         return 0
 
     filtered_packets = filter_saved_application_packets(
@@ -202,6 +224,7 @@ def list_packets_command_with_args(args: list[str], applications_dir: Path) -> i
 
     print(f"Saved Application Packets ({len(filtered_packets)})")
     print("=" * 34)
+    print(f"Profile: {profile['display_name']} ({profile['profile_id']})")
     for index, packet in enumerate(filtered_packets, start=1):
         print(f"{index}. {packet['title']} at {packet['company']}")
         print(f"   Saved: {packet['saved_date']}")
@@ -275,13 +298,26 @@ def update_packet_status_command(args: list[str]) -> int:
     return 0 if result["updated"] else 1
 
 
-def today_command(applications_dir: Path) -> int:
-    packets = list_saved_application_packets(applications_dir)
+def today_command(args: list[str], applications_dir: Path) -> int:
+    profile = _load_profile_from_args(args)
+    if profile is None:
+        return 1
+    profile_args = _strip_profile_option(args)
+    if _has_unknown_args(profile_args, set()):
+        print("Error: Use python .\\src\\main.py --today [--profile default]")
+        return 1
+
+    profile_dir = profile_applications_dir(applications_dir, profile)
+    packets = list_saved_application_packets(
+        profile_dir,
+        legacy_root=_legacy_root_for_profile(profile, applications_dir),
+    )
     queue = get_today_application_queue(packets)
     total_items = sum(len(items) for items in queue.values())
 
     print("Today")
     print("=" * 30)
+    print(f"Profile: {profile['display_name']} ({profile['profile_id']})")
     print(f"Items needing attention: {total_items}")
     print(f"Overdue: {len(queue['overdue'])}")
     print(f"Due today: {len(queue['due_today'])}")
@@ -357,6 +393,48 @@ def _get_option(args: list[str], name: str) -> str | None:
     return value
 
 
+def _load_profile_from_args(args: list[str]) -> dict[str, object] | None:
+    if _profile_option_missing_value(args):
+        print("Error: --profile requires a profile id, such as default.")
+        return None
+
+    profile_id = _get_option(args, "--profile") or DEFAULT_PROFILE_ID
+    try:
+        return load_profile(profile_id, PROFILES_ROOT, LOCAL_PROFILES_ROOT)
+    except FileNotFoundError as error:
+        print(f"Error: {error}")
+        return None
+
+
+def _profile_option_missing_value(args: list[str]) -> bool:
+    if "--profile" not in args:
+        return False
+
+    index = args.index("--profile")
+    return index + 1 >= len(args) or args[index + 1].startswith("--")
+
+
+def _strip_profile_option(args: list[str]) -> list[str]:
+    stripped_args = []
+    index = 0
+    while index < len(args):
+        if args[index] == "--profile":
+            index += 2
+            continue
+        stripped_args.append(args[index])
+        index += 1
+    return stripped_args
+
+
+def _legacy_root_for_profile(
+    profile: dict[str, object],
+    applications_dir: Path,
+) -> Path | None:
+    if profile.get("profile_id") == DEFAULT_PROFILE_ID:
+        return applications_dir
+    return None
+
+
 def _has_unknown_args(args: list[str], allowed_options: set[str]) -> bool:
     index = 0
     while index < len(args):
@@ -417,6 +495,17 @@ def print_summary(job: dict[str, str], score_details: dict[str, object]) -> None
     print(f"Matched keywords: {matched_keywords}")
     print(f"Concerns: {concerns}")
     print_explanation(score_details["explanation"])
+
+
+def print_profile_summary(profile: dict[str, object]) -> None:
+    print("Profile")
+    print("=" * 30)
+    print(f"Name: {profile['display_name']}")
+    print(f"ID: {profile['profile_id']}")
+    print(f"Source: {profile['source']}")
+    if not profile.get("resume_text"):
+        print("Profile resume text: Not found")
+    print()
 
 
 def print_explanation(explanation: object) -> None:

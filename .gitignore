@@ -10,6 +10,7 @@ config.local.json
 data/*.csv
 data/*.json
 data/profile/
+local_profiles/
 output/
 applications/
 resumes/

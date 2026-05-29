@@ -159,3 +159,17 @@ def test_save_application_packet_json_is_valid(tmp_path: Path) -> None:
     assert payload["application_tracking"]["status_updated_at"]
     assert "raw_text" not in payload["score_summary"]
     assert "raw_text" not in payload["application_packet"]
+
+
+def test_save_application_packet_can_write_under_profile_folder(tmp_path: Path) -> None:
+    profile_root = tmp_path / "applications" / "default"
+
+    result = save_application_packet(
+        _packet(),
+        _score_result(),
+        profile_root,
+        packet_date=date(2026, 5, 28),
+    )
+
+    assert result["folder_path"].parent == profile_root
+    assert result["folder_path"].exists()

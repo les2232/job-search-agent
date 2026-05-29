@@ -48,17 +48,23 @@ SORT_OPTIONS = [
 
 def list_saved_application_packets(
     output_root: str | Path = "applications",
+    legacy_root: str | Path | None = None,
 ) -> list[dict[str, object]]:
     """Return summaries for saved application packets."""
-    root = Path(output_root)
-    if not root.exists():
-        return []
-
     summaries = []
-    for folder_path in sorted(path for path in root.iterdir() if path.is_dir()):
-        packet = load_saved_application_packet(folder_path)
-        if packet:
-            summaries.append(packet["summary"])
+    seen_paths: set[Path] = set()
+
+    for root in _packet_roots(output_root, legacy_root):
+        if not root.exists():
+            continue
+        for folder_path in sorted(path for path in root.iterdir() if path.is_dir()):
+            resolved_path = folder_path.resolve()
+            if resolved_path in seen_paths:
+                continue
+            seen_paths.add(resolved_path)
+            packet = load_saved_application_packet(folder_path)
+            if packet:
+                summaries.append(packet["summary"])
     return summaries
 
 
@@ -511,3 +517,15 @@ def _sanitize_summary(packet: dict[str, object]) -> dict[str, object]:
         for key, value in packet.items()
         if str(key) not in RAW_TEXT_KEYS
     }
+
+
+def _packet_roots(
+    output_root: str | Path,
+    legacy_root: str | Path | None,
+) -> list[Path]:
+    roots = [Path(output_root)]
+    if legacy_root is not None:
+        legacy_path = Path(legacy_root)
+        if legacy_path.resolve() != roots[0].resolve():
+            roots.append(legacy_path)
+    return roots
