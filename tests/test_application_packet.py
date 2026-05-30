@@ -153,7 +153,7 @@ def test_generate_application_packet_bullets_are_editable_suggestions() -> None:
     bullets = packet["resume_bullet_suggestions"]
 
     assert len(bullets) >= 3
-    assert all(str(bullet).startswith("Suggested bullet:") for bullet in bullets)
+    assert all("Use only if true:" in str(bullet) or str(bullet).startswith("Do not present") for bullet in bullets)
     assert REVIEW_WARNING in packet["risk_notes"]
 
 
@@ -250,14 +250,12 @@ def test_packet_highlights_fei_hard_requirements_to_verify() -> None:
     assert "Git/version control" in focus_text
     assert "SQL/database work" in focus_text
     assert "Major requirements to verify" in focus_text
-    assert "C# / .NET 5+" in focus_text
-    assert "Angular 16+" in focus_text
-    assert "TypeScript" in focus_text
+    assert "C# / .NET 5+ professional experience" in focus_text
+    assert "Angular 16+ and TypeScript" in focus_text
+    assert "Required years of full-stack software development experience" in focus_text
     assert "AWS serverless" in risk_text
-    assert "Domain Driven Design" in risk_text
-    assert "Service Oriented Architecture" in risk_text
-    assert "Unit testing" in risk_text
-    assert "Test Driven Development" in risk_text
+    assert "Domain Driven Design and Service Oriented Architecture" in risk_text
+    assert "Unit testing and Test Driven Development" in risk_text
 
 
 def test_packet_does_not_list_unrelated_config_keywords_as_fei_gaps() -> None:
@@ -279,9 +277,61 @@ def test_packet_marks_fei_role_as_stretch_when_hard_requirements_are_unsupported
     )
     packet_text = " ".join(packet["resume_focus_areas"] + packet["risk_notes"])
 
-    assert "stretch full-stack developer role" in packet_text
-    assert "C#/.NET" in packet_text
+    assert "Fit Verdict: Stretch Role" in packet["positioning_summary"]
+    assert "Full-Stack Developer Who Shares Our Commitment" not in packet["positioning_summary"]
+    assert "likely a stretch" in packet["positioning_summary"]
+    assert packet_text.count("likely a stretch") == 0
+    assert "C# / .NET" in packet_text
     assert "Angular/TypeScript" in packet_text
     assert "cloud/serverless" in packet_text
     assert "testing" in packet_text
     assert "architecture" in packet_text
+
+
+def test_fei_strategy_notes_include_apply_skip_guidance_and_translated_support() -> None:
+    packet = generate_application_packet(
+        _fei_score_result(),
+        (
+            "Local IT support, user communication, troubleshooting, documentation, "
+            "classroom AV troubleshooting, git, and SQL."
+        ),
+    )
+    focus_text = " ".join(packet["resume_focus_areas"])
+
+    assert "Apply only if:" in focus_text
+    assert "Consider skipping or deprioritizing if:" in focus_text
+    assert "user-facing technical troubleshooting" in focus_text
+    assert "Do not present it as software development experience" in focus_text
+    assert "classroom/AV troubleshooting" not in focus_text
+
+
+def test_fei_resume_bullets_are_conditional_and_evidence_based() -> None:
+    packet = generate_application_packet(
+        _fei_score_result(),
+        "Local IT support, documentation, troubleshooting, git, and SQL.",
+    )
+    bullets = packet["resume_bullet_suggestions"]
+    bullet_text = " ".join(bullets)
+
+    assert all("Use only if true:" in bullet or bullet.startswith("Do not present") for bullet in bullets)
+    assert "Used Git/version control" in bullet_text
+    assert "Worked with SQL" in bullet_text
+    assert "Documented technical workflows" in bullet_text
+    assert "Troubleshot technical systems used by real users" in bullet_text
+    assert "Tailored documentation or support workflows around" not in bullet_text
+
+
+def test_fei_risk_notes_are_concise_and_role_specific() -> None:
+    packet = generate_application_packet(
+        _fei_score_result(),
+        "Local IT support, documentation, troubleshooting, git, and SQL.",
+    )
+    risk_text = " ".join(packet["risk_notes"])
+
+    assert REVIEW_WARNING in packet["risk_notes"]
+    assert "Major role requirements to verify before applying" in risk_text
+    assert "Stretch-role risk" in risk_text
+    assert risk_text.count("This role is likely a stretch") == 0
+    assert "python" not in risk_text.lower()
+    assert "dashboard" not in risk_text.lower()
+    assert "linux" not in risk_text.lower()

@@ -37,7 +37,7 @@ def generate_application_packet(
 
     profile_themes = _find_profile_themes(profile_text)
     role_label = _role_label(metadata)
-    cover_role_label = _cover_role_label(role_label)
+    display_role_label = _cover_role_label(role_label)
     company_label = _company_label(metadata)
     strongest_matches = _strongest_matches(matched_keywords, profile_themes)
     supported_overlap = _supported_overlap(
@@ -51,18 +51,19 @@ def generate_application_packet(
         matched_keywords,
         profile_text,
     )
+    display_requirements_to_verify = _display_requirements(requirements_to_verify)
     gaps_to_review = _gaps_to_review(
         missing_keywords,
         concerns,
-        requirements_to_verify,
+        display_requirements_to_verify,
     )
-    stretch_warning = _build_stretch_warning(requirements_to_verify)
+    stretch_warning = _build_stretch_warning(display_requirements_to_verify)
 
     return {
         "positioning_summary": _build_positioning_summary(
             score,
             recommendation,
-            role_label,
+            display_role_label,
             company_label,
             strongest_matches,
             stretch_warning,
@@ -76,17 +77,19 @@ def generate_application_packet(
             gaps_to_review,
             profile_themes,
             supported_overlap,
-            requirements_to_verify,
+            display_requirements_to_verify,
             stretch_warning,
         ),
         "resume_bullet_suggestions": _build_resume_bullet_suggestions(
             strongest_matches,
             profile_themes,
+            supported_overlap,
+            display_requirements_to_verify,
         ),
         "keywords_to_include_honestly": matched_keywords[:8],
         "keywords_to_avoid_or_verify": gaps_to_review[:8],
         "cover_letter_draft": _build_cover_letter_draft(
-            cover_role_label,
+            display_role_label,
             company_label,
             metadata,
             matched_keywords,
@@ -95,7 +98,7 @@ def generate_application_packet(
             source_text,
         ),
         "recruiter_message": _build_recruiter_message(
-            role_label,
+            display_role_label,
             company_label,
             strongest_matches,
         ),
@@ -104,7 +107,7 @@ def generate_application_packet(
             metadata,
             gaps_to_review,
             explanation_concerns,
-            requirements_to_verify,
+            display_requirements_to_verify,
             stretch_warning,
         ),
     }
@@ -220,8 +223,9 @@ def _build_positioning_summary(
 ) -> str:
     if stretch_warning:
         return (
-            f"{role_label} at {company_label} should be treated as a stretch "
-            f"role. {stretch_warning}"
+            "Fit Verdict: Stretch Role\n\n"
+            f"{role_label} at {company_label} is likely a stretch unless the "
+            "candidate has direct evidence for the main hard requirements."
         )
     match_text = _format_inline_list(strongest_matches[:4], "the configured fit areas")
     if recommendation == "Apply":
@@ -282,26 +286,11 @@ def _build_resume_focus_areas(
             + _format_inline_list(requirements_to_verify[:10], "role requirements")
             + "."
         )
-    if stretch_warning:
-        focus_areas.append("Stretch warning: " + stretch_warning)
-    if strongest_matches:
-        focus_areas.append(
-            "Lead with verified experience related to: "
-            + _format_inline_list(strongest_matches[:5], "your strongest matches")
-            + "."
-        )
     if profile_themes:
         focus_areas.append(
-            "Use concrete examples from profile themes such as: "
-            + _format_inline_list(profile_themes[:5], "your profile themes")
-            + "."
+            _build_transferable_theme_note(profile_themes)
         )
-    if gaps_to_review:
-        focus_areas.append(
-            "Review before adding: "
-            + _format_inline_list(gaps_to_review[:5], "potential gaps")
-            + "."
-        )
+    focus_areas.extend(_build_apply_skip_guidance(requirements_to_verify))
     if not focus_areas:
         focus_areas.append(
             "Use only resume/profile details you can verify, and keep the summary broad."
@@ -312,35 +301,34 @@ def _build_resume_focus_areas(
 def _build_resume_bullet_suggestions(
     strongest_matches: list[str],
     profile_themes: list[str],
+    supported_overlap: list[str],
+    requirements_to_verify: list[str],
 ) -> list[str]:
-    matches = _format_inline_list(strongest_matches[:3], "the role requirements")
     bullets = [
         (
-            "Suggested bullet: Supported users through frontline technical support, "
-            "clear communication, and documented troubleshooting steps; replace with "
-            "your exact verified scope."
+            "Use only if true: Used Git/version control in coursework, scripts, "
+            "or software projects to track changes and manage technical work."
         ),
         (
-            "Suggested bullet: Troubleshot classroom, AV, endpoint, account/access, "
-            "or workflow issues using examples that are already supported by your resume."
+            "Use only if true: Worked with SQL, reports, database queries, or "
+            "data-backed troubleshooting to support technical decisions."
         ),
         (
-            f"Suggested bullet: Tailored documentation or support workflows around "
-            f"{matches}; keep only the keywords you can explain with real examples."
+            "Use only if true: Documented technical workflows so users or team "
+            "members could resolve recurring issues more consistently."
+        ),
+        (
+            "Use only if true: Troubleshot technical systems used by real users "
+            "and communicated resolution steps clearly to stakeholders."
         ),
     ]
 
-    if any("Python" in theme or "knowledge base" in theme for theme in profile_themes):
+    if requirements_to_verify:
         bullets.append(
-            "Suggested bullet: Built or organized Python/Flask support tools, "
-            "knowledge base content, or guided support flows as a project or prototype."
+            "Do not present support, classroom, or AV troubleshooting as software "
+            "development experience. Use it only as evidence of user-centered "
+            "technical support, troubleshooting, documentation, and follow-through."
         )
-    if any("training" in theme for theme in profile_themes):
-        bullets.append(
-            "Suggested bullet: Created training, onboarding, checklist, or assessment "
-            "materials to help users or new team members follow support workflows."
-        )
-
     return bullets[:5]
 
 
@@ -547,7 +535,14 @@ def _build_risk_notes(
             + "."
         )
     if stretch_warning:
-        risk_notes.append(stretch_warning)
+        risk_notes.append(
+            "Stretch-role risk: direct evidence is needed for "
+            + _format_inline_list(
+                _stretch_gap_labels(requirements_to_verify),
+                "the main hard-skill gaps",
+            )
+            + "."
+        )
     for concern in explanation_concerns:
         if "No concern" not in concern and concern not in risk_notes:
             risk_notes.append(concern)
@@ -565,15 +560,15 @@ def _supported_overlap(
     overlap = []
     hard_requirements = _requirement_values(job_requirements, "hard_requirements")
     if any(keyword.lower() in {"git", "github"} for keyword in matched_keywords):
-        overlap.append("Git/version control")
+        overlap.append("Git/version control, if supported by the candidate's profile or projects")
     if any(keyword.lower() in {"sql", "database", "data"} for keyword in matched_keywords):
-        overlap.append("SQL/database work")
+        overlap.append("SQL/database work, if supported by database, query, reporting, or data-backed troubleshooting examples")
     if any(keyword.lower() == "remote" for keyword in matched_keywords):
         overlap.append("remote collaboration")
     for theme, label in [
-        ("frontline IT support", "communication and user support"),
+        ("frontline IT support", "user-facing technical support translated as understanding user needs and supporting reliable systems"),
         ("documentation", "documentation"),
-        ("classroom/AV troubleshooting", "troubleshooting"),
+        ("classroom/AV troubleshooting", "user-facing technical troubleshooting"),
         ("ticket workflows", "follow-through in support workflows"),
     ]:
         if theme in profile_themes:
@@ -630,8 +625,20 @@ def _is_overlap_relevant(value: str, hard_requirements: list[str]) -> bool:
 
 
 def _build_stretch_warning(requirements_to_verify: list[str]) -> str:
+    stack_gaps = _stretch_gap_labels(requirements_to_verify)
+    if len(stack_gaps) < 3:
+        return ""
+    return (
+        "This role is likely a stretch unless the candidate "
+        "has direct evidence for the required "
+        + _format_inline_list(stack_gaps, "hard-skill")
+        + " experience."
+    )
+
+
+def _stretch_gap_labels(requirements_to_verify: list[str]) -> list[str]:
     hard_gap_text = " ".join(requirements_to_verify).lower()
-    stack_gaps = [
+    return [
         label
         for label, markers in [
             ("C#/.NET", ["c# / .net", ".net"]),
@@ -642,14 +649,61 @@ def _build_stretch_warning(requirements_to_verify: list[str]) -> str:
         ]
         if any(marker in hard_gap_text for marker in markers)
     ]
-    if len(stack_gaps) < 3:
-        return ""
+
+
+def _display_requirements(requirements: list[str]) -> list[str]:
+    display_values = []
+    for requirement in requirements:
+        mapped = {
+            "C# / .NET 5+": "C# / .NET 5+ professional experience",
+            "Angular 16+": "Angular 16+ and TypeScript",
+            "TypeScript": "Angular 16+ and TypeScript",
+            "SQL Server / relational database": "SQL Server or comparable relational database experience",
+            "AWS serverless": "AWS serverless or similar cloud services",
+            "Domain Driven Design": "Domain Driven Design and Service Oriented Architecture",
+            "Service Oriented Architecture": "Domain Driven Design and Service Oriented Architecture",
+            "Unit testing": "Unit testing and Test Driven Development",
+            "Test Driven Development": "Unit testing and Test Driven Development",
+        }.get(requirement, requirement)
+        if "years" in mapped.lower():
+            mapped = "Required years of full-stack software development experience"
+        display_values.append(mapped)
+    return _dedupe(display_values)
+
+
+def _build_transferable_theme_note(profile_themes: list[str]) -> str:
+    if "classroom/AV troubleshooting" in profile_themes:
+        return (
+            "Transferable support evidence: frame learning-space technical support as "
+            "user-facing technical troubleshooting, documentation, support for "
+            "systems used by real users, clear communication, and follow-through. "
+            "Do not present it as software development experience."
+        )
     return (
-        "This appears to be a stretch full-stack developer role unless the candidate "
-        "has direct evidence for the required "
-        + _format_inline_list(stack_gaps, "hard-skill")
-        + " experience."
+        "Use concrete examples from profile themes such as: "
+        + _format_inline_list(profile_themes[:5], "your profile themes")
+        + "."
     )
+
+
+def _build_apply_skip_guidance(requirements_to_verify: list[str]) -> list[str]:
+    if not requirements_to_verify:
+        return []
+    return [
+        (
+            "Apply only if: you can show direct evidence of .NET/C#, "
+            "Angular/TypeScript, or comparable full-stack development work; you "
+            "can explain SQL/database work clearly; you have projects, coursework, "
+            "or professional examples involving testing, architecture, APIs, or "
+            "cloud services; and you are comfortable positioning this as a stretch role."
+        ),
+        (
+            "Consider skipping or deprioritizing if: your experience is mostly IT "
+            "support with little software development evidence; you cannot support "
+            "the required years of full-stack development; or you would be relying "
+            "almost entirely on transferable skills."
+        ),
+    ]
 
 
 def _requirement_values(job_requirements: dict[str, object], key: str) -> list[str]:
