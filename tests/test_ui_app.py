@@ -3,6 +3,7 @@ from ui_app import (
     _recommendation_guidance,
     _saved_packet_table_row,
     _saved_packets_for_queue,
+    _score_analysis_key,
 )
 
 
@@ -127,3 +128,23 @@ def test_saved_packet_table_row_reads_like_application_queue() -> None:
         "Next action date",
     ]
     assert row["Job"] == "Full-Stack Developer (2 versions)"
+
+
+def test_score_analysis_key_changes_when_hard_requirements_change() -> None:
+    original = _score_result(
+        title="AI Agent Builder",
+        company="Arrivia, Inc.",
+        hard_requirements=["Object-oriented design patterns"],
+    )
+    updated = _score_result(
+        title="AI Agent Builder",
+        company="Arrivia, Inc.",
+        hard_requirements=[
+            "AI agent / agentic workflows",
+            "LLM / large language model workflows",
+            "Prompt engineering",
+            "Object-oriented design patterns",
+        ],
+    )
+
+    assert _score_analysis_key(original) != _score_analysis_key(updated)

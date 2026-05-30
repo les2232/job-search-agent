@@ -819,7 +819,13 @@ def _requirements_to_verify(
     profile_text: str | None,
 ) -> list[str]:
     requirements = []
-    for requirement in _requirement_values(job_requirements, "hard_requirements"):
+    hard_requirements = _requirement_values(job_requirements, "hard_requirements")
+    if _has_ai_automation_requirements(hard_requirements):
+        requirements.extend(hard_requirements)
+        requirements.extend(_requirement_values(job_requirements, "experience_requirements"))
+        return _dedupe(requirements)
+
+    for requirement in hard_requirements:
         if not _requirement_supported(requirement, matched_keywords, profile_text):
             requirements.append(requirement)
     requirements.extend(_requirement_values(job_requirements, "experience_requirements"))

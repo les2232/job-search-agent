@@ -28,6 +28,21 @@ Required Skills/Experience
 - Test Driven Development
 """
 
+ARRIVIA_AI_JOB_TEXT = """
+Arrivia, Inc. is hiring an AI Agent Builder to improve automation workflows for
+travel operations. This remote role will build AI agents and API integrations
+that connect internal systems, data workflows, and user-facing support tools.
+
+Required Skills/Experience
+- Python scripting or Python development
+- SQL and data workflows
+- APIs and API integration
+- Automation and workflow automation
+- AI agent or agentic workflow experience
+- LLM workflows and prompt engineering
+- Object-oriented design patterns
+"""
+
 
 def _packet() -> dict[str, object]:
     return {
@@ -95,6 +110,31 @@ def _fei_score_result() -> dict[str, object]:
         },
         "job_requirements": extract_job_requirements(FEI_JOB_TEXT),
         "raw_text": FEI_JOB_TEXT,
+    }
+
+
+def _arrivia_score_result() -> dict[str, object]:
+    return {
+        "job_metadata": {
+            "title": "AI Agent Builder",
+            "company": "Arrivia, Inc.",
+            "location": "Austin, TX",
+            "work_mode": "Remote",
+        },
+        "score": 80,
+        "recommendation": "Apply",
+        "matched_keywords": ["python", "sql", "apis", "automation", "data", "remote"],
+        "missing_keywords": ["dashboard", "linux"],
+        "concerns": [],
+        "explanation": {
+            "fit_summary": "Strong overlap with AI/automation requirements to verify.",
+            "strengths": ["Matched fit keywords: python, sql, apis, automation, data, remote"],
+            "gaps": ["Role-specific hard requirements to verify."],
+            "concerns": ["No concern keywords or metadata issues were found."],
+            "tailoring_suggestions": ["Review AI/automation evidence before applying."],
+        },
+        "job_requirements": extract_job_requirements(ARRIVIA_AI_JOB_TEXT),
+        "raw_text": ARRIVIA_AI_JOB_TEXT,
     }
 
 
@@ -266,3 +306,40 @@ def test_resume_tailoring_notes_are_scannable_strategy_packet(tmp_path: Path) ->
     assert "python" not in notes.lower()
     assert "dashboard" not in notes.lower()
     assert "linux" not in notes.lower()
+
+
+def test_saved_ai_packet_uses_same_requirements_as_analysis(tmp_path: Path) -> None:
+    score_result = _arrivia_score_result()
+    packet = generate_application_packet(
+        score_result,
+        (
+            "Profile includes Python scripts, SQL reports, API experiments, "
+            "automation projects, documentation, data troubleshooting, and IT support."
+        ),
+    )
+    result = save_application_packet(
+        packet,
+        score_result,
+        tmp_path,
+        packet_date=date(2026, 5, 30),
+    )
+
+    notes = result["output_paths"]["resume_tailoring_notes"].read_text(encoding="utf-8")
+    payload = json.loads(
+        result["output_paths"]["packet_json"].read_text(encoding="utf-8")
+    )
+    packet_text = str(payload)
+
+    assert "AI agent or automation workflow experience" in notes
+    assert "LLM or large language model workflow experience" in notes
+    assert "Prompt engineering or prompting experience" in notes
+    assert "API integration experience" in notes
+    assert "Object-oriented design patterns" in notes
+    assert "C# / .NET" not in notes
+    assert "Angular 16+" not in notes
+    assert "comparable full-stack development work" not in notes
+    assert "AI agent / agentic workflows" in packet_text
+    assert "LLM / large language model workflows" in packet_text
+    assert "Prompt engineering" in packet_text
+    assert "raw_text" not in packet_text
+    assert "raw_text" not in payload["score_summary"]

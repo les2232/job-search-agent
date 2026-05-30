@@ -327,6 +327,9 @@ def _build_packet_payload(
             "matched_keywords": _as_string_list(score_result.get("matched_keywords")),
             "missing_keywords": _as_string_list(score_result.get("missing_keywords")),
             "concerns": _as_string_list(score_result.get("concerns")),
+            "job_requirements": _sanitize_packet_value(
+                score_result.get("job_requirements"),
+            ),
             "explanation": score_result.get("explanation"),
         },
         "application_packet": _sanitize_packet_value(packet),

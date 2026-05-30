@@ -161,7 +161,9 @@ def _show_guided_packet_builder(
             st.session_state["builder_job"] = job
             st.session_state["builder_score_details"] = score_details
             st.session_state["builder_full_job_text"] = full_job_text
+            st.session_state["builder_analysis_key"] = _score_analysis_key(score_details)
             st.session_state.pop("builder_packet", None)
+            st.session_state.pop("builder_packet_analysis_key", None)
             st.session_state.pop("builder_saved_packet", None)
 
     job = st.session_state.get("builder_job")
@@ -225,6 +227,12 @@ def _show_builder_analysis(
     if isinstance(explanation, dict):
         st.write(str(explanation.get("fit_summary", "")))
 
+    analysis_key = _score_analysis_key(score_details)
+    if st.session_state.get("builder_packet_analysis_key") != analysis_key:
+        st.session_state.pop("builder_packet", None)
+        st.session_state.pop("builder_packet_analysis_key", None)
+        st.session_state.pop("builder_saved_packet", None)
+
     guidance = _recommendation_guidance(score_details)
     if guidance["tone"] == "success":
         st.success(guidance["message"])
@@ -255,6 +263,7 @@ def _show_builder_analysis(
             score_details,
             profile.get("resume_text"),
         )
+        st.session_state["builder_packet_analysis_key"] = analysis_key
         st.session_state.pop("builder_saved_packet", None)
 
     packet = st.session_state.get("builder_packet")
@@ -1381,6 +1390,30 @@ def _packet_widget_key(packet_details: dict[str, object], prefix: str) -> str:
         for character in folder_path
     ).strip("_")
     return f"{prefix}_{safe_path or 'unknown_packet'}"
+
+
+def _score_analysis_key(score_details: dict[str, object]) -> tuple[object, ...]:
+    metadata = score_details.get("job_metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+    return (
+        metadata.get("title"),
+        metadata.get("company"),
+        metadata.get("location"),
+        metadata.get("work_mode"),
+        score_details.get("score"),
+        score_details.get("recommendation"),
+        tuple(_as_tuple_items(score_details.get("matched_keywords"))),
+        tuple(_as_tuple_items(score_details.get("concerns"))),
+        tuple(_job_requirement_list(score_details, "hard_requirements")),
+        tuple(_job_requirement_list(score_details, "experience_requirements")),
+    )
+
+
+def _as_tuple_items(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if str(item).strip()]
 
 
 def _job_requirement_list(score_details: dict[str, object], key: str) -> list[str]:
