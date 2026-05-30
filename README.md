@@ -245,10 +245,12 @@ tailoring notes.
 
 ## Evidence Check + Tailored Resume Draft
 
-The guided UI includes an evidence check after job analysis. For each detected
-hard requirement, mark whether the candidate has strong evidence, some evidence,
-no evidence, or is not sure. Add short notes that point to real resume, project,
-coursework, or work examples.
+The guided UI includes an evidence check after job analysis. It auto-suggests
+evidence status and notes from the selected profile's `resume_base.md`, then lets
+you correct anything that is too generous, too cautious, or incomplete. For each
+detected hard requirement, confirm whether the candidate has strong evidence,
+some evidence, no evidence, or is not sure. Add or revise short notes that point
+to real resume, project, coursework, or work examples.
 
 The app uses those answers to generate:
 

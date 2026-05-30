@@ -44,6 +44,7 @@ DEFAULT_RESUME_PATH = PROJECT_ROOT / "data" / "profile" / "resume_base.md"
 PROFILES_ROOT = PROJECT_ROOT / "profiles"
 LOCAL_PROFILES_ROOT = PROJECT_ROOT / "local_profiles"
 STATUS_OPTIONS = ["New", "Applied", "Interview", "Rejected", "Saved", "Archived"]
+EVIDENCE_STATUS_OPTIONS = ["Not sure", "Strong evidence", "Some evidence", "No evidence"]
 
 
 def main() -> None:
@@ -344,34 +345,231 @@ def _show_evidence_check(
     if not requirements:
         return {}
 
+    suggestions = _suggest_evidence_answers(profile, requirements)
+    summary_counts = _evidence_suggestion_counts(suggestions)
     st.subheader("Evidence Check")
     st.caption(
-        "Map each major requirement to real resume, project, coursework, or work evidence before generating the packet."
+        "Auto-suggestions come from the selected profile. Review before generating; suggestions are not verified truth."
     )
+    metric_cols = st.columns(4)
+    metric_cols[0].metric("Strong", summary_counts["Strong evidence"])
+    metric_cols[1].metric("Some", summary_counts["Some evidence"])
+    metric_cols[2].metric("Needs review", summary_counts["Not sure"])
+    metric_cols[3].metric("No evidence", summary_counts["No evidence"])
+    st.caption(
+        "Use suggested evidence by leaving the prefilled values unchanged, "
+        "or edit any status/notes that are wrong."
+    )
+
     evidence_answers = {}
     profile_id = str(profile.get("profile_id", "profile"))
     analysis_slug = _requirement_slug("|".join(str(item) for item in analysis_key))
-    for requirement in requirements:
-        requirement_slug = _requirement_slug(requirement)
-        key_prefix = f"evidence_{profile_id}_{analysis_slug}_{requirement_slug}"
-        with st.container(border=True):
-            st.markdown(f"**{requirement}**")
-            status = st.selectbox(
-                "Evidence status",
-                ["Not sure", "Strong evidence", "Some evidence", "No evidence"],
-                key=f"{key_prefix}_status",
-            )
-            notes = st.text_area(
-                "Evidence notes",
-                key=f"{key_prefix}_notes",
-                height=80,
-                placeholder="Example: Built small API projects in coursework and used REST APIs in local tools.",
-            )
-        evidence_answers[requirement] = {
-            "status": status,
-            "notes": notes.strip(),
-        }
+    groups = [
+        ("Suggested Supported Evidence", ["Strong evidence", "Some evidence"], False),
+        ("Needs Review", ["Not sure"], True),
+        ("Missing / No Evidence", ["No evidence"], False),
+    ]
+    for label, statuses, expanded in groups:
+        grouped_requirements = [
+            requirement
+            for requirement in requirements
+            if suggestions[requirement]["status"] in statuses
+        ]
+        if not grouped_requirements:
+            continue
+        with st.expander(f"{label} ({len(grouped_requirements)})", expanded=expanded):
+            for requirement in grouped_requirements:
+                suggestion = suggestions[requirement]
+                requirement_slug = _requirement_slug(requirement)
+                key_prefix = f"evidence_{profile_id}_{analysis_slug}_{requirement_slug}"
+                st.markdown(f"**{requirement}**")
+                st.caption(f"Suggested: {suggestion['status']} - {suggestion['notes']}")
+                status = st.selectbox(
+                    "Evidence status",
+                    EVIDENCE_STATUS_OPTIONS,
+                    index=EVIDENCE_STATUS_OPTIONS.index(suggestion["status"]),
+                    key=f"{key_prefix}_status",
+                )
+                notes = st.text_area(
+                    "Evidence notes",
+                    value=suggestion["notes"],
+                    key=f"{key_prefix}_notes",
+                    height=80,
+                    placeholder="Example: Built small API projects in coursework and used REST APIs in local tools.",
+                )
+                evidence_answers[requirement] = {
+                    "status": status,
+                    "notes": notes.strip(),
+                }
     return evidence_answers
+
+
+def _suggest_evidence_answers(
+    profile: dict[str, object],
+    requirements: list[str],
+) -> dict[str, dict[str, str]]:
+    profile_text = str(profile.get("resume_text") or "")
+    return {
+        requirement: _suggest_evidence_for_requirement(profile_text, requirement)
+        for requirement in requirements
+    }
+
+
+def _suggest_evidence_for_requirement(
+    profile_text: str,
+    requirement: str,
+) -> dict[str, str]:
+    normalized_profile = profile_text.lower()
+    normalized_requirement = requirement.lower()
+    use_carefully = _profile_marks_use_carefully(normalized_profile, normalized_requirement)
+
+    if use_carefully:
+        return {
+            "status": "Not sure",
+            "notes": (
+                "Auto-suggested from profile: this area is marked use carefully. "
+                "Do not include unless there is direct project/work evidence."
+            ),
+        }
+
+    if "python" in normalized_requirement:
+        return _suggest_from_markers(
+            normalized_profile,
+            ["python", "flask", "streamlit", "automation scripts", "local tooling", "coursework"],
+            "Strong evidence",
+            "Some evidence",
+            "Profile mentions Python, Flask/Streamlit tools, automation workflows, or local tooling. Verify exact examples before using.",
+        )
+    if "api" in normalized_requirement:
+        return _suggest_from_markers(
+            normalized_profile,
+            ["rest api", "rest apis", "json", "openai api", "api tooling", "backend", "fastapi"],
+            "Some evidence",
+            "Some evidence",
+            "Profile mentions REST APIs/JSON/OpenAI API or backend/API-related project work. Confirm concrete examples.",
+        )
+    if "sql" in normalized_requirement or "data" in normalized_requirement or "database" in normalized_requirement:
+        return _suggest_from_markers(
+            normalized_profile,
+            ["sql", "sqlite", "dashboards", "logs", "data analysis", "reports", "data-backed"],
+            "Some evidence",
+            "Some evidence",
+            "Profile mentions SQL/SQLite, dashboards, logs, reports, or data-backed troubleshooting. Confirm exact examples.",
+        )
+    if "prompt" in normalized_requirement:
+        return _suggest_from_markers(
+            normalized_profile,
+            ["prompt engineering", "openai api", "codex", "ai-assisted", "structured prompting"],
+            "Some evidence",
+            "Some evidence",
+            "Profile mentions prompt engineering or AI-assisted workflow design. Avoid overstating production experience.",
+        )
+    if (
+        "llm" in normalized_requirement
+        or "large language" in normalized_requirement
+        or "ai agent" in normalized_requirement
+        or "agentic" in normalized_requirement
+        or "agent-building" in normalized_requirement
+    ):
+        if "production agent" in normalized_profile or "production ai engineering" in normalized_profile:
+            return {
+                "status": "Strong evidence",
+                "notes": (
+                    "Auto-suggested from profile: profile appears to mention "
+                    "production AI/agent experience. Verify the exact claim before using."
+                ),
+            }
+        return _suggest_from_markers(
+            normalized_profile,
+            ["openai api", "assistant", "packet builder", "ai tooling", "local assistant", "agent"],
+            "Some evidence",
+            "Not sure",
+            "Profile suggests AI assistant/tooling project exposure. Do not claim production agent experience unless supported.",
+        )
+    if "automation" in normalized_requirement or "workflow" in normalized_requirement:
+        return _suggest_from_markers(
+            normalized_profile,
+            ["workflow automation", "automation projects", "packet generation", "assistant projects", "scripts", "process improvement"],
+            "Some evidence",
+            "Some evidence",
+            "Profile mentions workflow automation and local tool/project work. Confirm specific project examples.",
+        )
+    if "cloud" in normalized_requirement or "deployment" in normalized_requirement or "aws" in normalized_requirement:
+        return _suggest_from_markers(
+            normalized_profile,
+            ["cloud", "deployment", "deployed", "aws", "azure", "serverless"],
+            "Some evidence",
+            "Not sure",
+            "Profile mentions cloud or deployment exposure. Verify before claiming deployed or production experience.",
+        )
+    if "unit testing" in normalized_requirement or "test driven" in normalized_requirement or "testing" in normalized_requirement:
+        return _suggest_from_markers(
+            normalized_profile,
+            ["pytest", "unit testing", "evaluation scripts", "validation"],
+            "Some evidence",
+            "Not sure",
+            "Profile may mention pytest, unit testing, or validation scripts. Confirm exact project evidence.",
+        )
+    return {
+        "status": "Not sure",
+        "notes": "Review manually against resume, projects, coursework, or work examples.",
+    }
+
+
+def _suggest_from_markers(
+    normalized_profile: str,
+    markers: list[str],
+    matched_status: str,
+    unmatched_status: str,
+    note: str,
+) -> dict[str, str]:
+    if any(marker in normalized_profile for marker in markers):
+        return {"status": matched_status, "notes": f"Auto-suggested from profile: {note}"}
+    return {
+        "status": unmatched_status,
+        "notes": "Review manually; profile text did not clearly prove this requirement.",
+    }
+
+
+def _profile_marks_use_carefully(
+    normalized_profile: str,
+    normalized_requirement: str,
+) -> bool:
+    careful_markers = {
+        ".net": [".net", "c#"],
+        "c#": [".net", "c#"],
+        "angular": ["angular"],
+        "typescript": ["typescript-heavy", "typescript"],
+        "kubernetes": ["kubernetes"],
+        "docker": ["docker"],
+        "devops": ["advanced devops", "devops"],
+        "cloud": ["cloud platforms", "cloud"],
+        "deployment": ["cloud platforms", "deployment"],
+        "production ml": ["production ml", "ml engineering"],
+    }
+    if "skills to use carefully" not in normalized_profile and "use carefully" not in normalized_profile:
+        return False
+    return any(
+        marker in normalized_profile and any(term in normalized_requirement for term in terms)
+        for marker, terms in careful_markers.items()
+    )
+
+
+def _evidence_suggestion_counts(
+    suggestions: dict[str, dict[str, str]],
+) -> dict[str, int]:
+    counts = {
+        "Strong evidence": 0,
+        "Some evidence": 0,
+        "Not sure": 0,
+        "No evidence": 0,
+    }
+    for suggestion in suggestions.values():
+        status = suggestion.get("status", "Not sure")
+        if status not in counts:
+            status = "Not sure"
+        counts[status] += 1
+    return counts
 
 
 def _show_packet_preview(

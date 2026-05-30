@@ -1,4 +1,5 @@
 from ui_app import (
+    _evidence_suggestion_counts,
     _evidence_requirements,
     _find_duplicate_saved_packets,
     _recommendation_guidance,
@@ -6,7 +7,25 @@ from ui_app import (
     _saved_packet_table_row,
     _saved_packets_for_queue,
     _score_analysis_key,
+    _suggest_evidence_answers,
+    _suggest_evidence_for_requirement,
 )
+
+
+PROFILE_TEXT = """
+## Technical Skills
+Python, Flask, Streamlit, SQL, SQLite, REST APIs, JSON, OpenAI API,
+prompt engineering, workflow automation, dashboards, reports, pytest.
+
+## Strongest Positioning
+Engineer transitioning from IT with local tooling, automation projects,
+assistant projects, data-backed troubleshooting, documentation, and support.
+
+## Skills To Use Carefully
+Only emphasize these when there is direct project evidence: cloud platforms,
+Kubernetes, Docker, Angular, TypeScript-heavy frontend, .NET, C#,
+production ML engineering, advanced DevOps.
+"""
 
 
 def _score_result(
@@ -167,3 +186,76 @@ def test_evidence_requirement_helpers_are_stable() -> None:
         "LLM / large language model workflows",
         "3+ years automation experience",
     ]
+
+
+def test_evidence_suggestion_helper_prefills_supported_python_api_and_sql() -> None:
+    python_suggestion = _suggest_evidence_for_requirement(
+        PROFILE_TEXT,
+        "Python scripting/development",
+    )
+    api_suggestion = _suggest_evidence_for_requirement(
+        PROFILE_TEXT,
+        "API integration experience",
+    )
+    sql_suggestion = _suggest_evidence_for_requirement(
+        PROFILE_TEXT,
+        "SQL/data workflow experience",
+    )
+
+    assert python_suggestion["status"] in {"Strong evidence", "Some evidence"}
+    assert "Auto-suggested from profile" in python_suggestion["notes"]
+    assert "Python" in python_suggestion["notes"]
+    assert api_suggestion["status"] == "Some evidence"
+    assert "REST APIs" in api_suggestion["notes"]
+    assert sql_suggestion["status"] == "Some evidence"
+    assert "SQL/SQLite" in sql_suggestion["notes"]
+
+
+def test_evidence_suggestion_helper_keeps_ai_agent_exposure_cautious() -> None:
+    suggestion = _suggest_evidence_for_requirement(
+        PROFILE_TEXT,
+        "LLM / large language model workflow experience",
+    )
+
+    assert suggestion["status"] == "Some evidence"
+    assert "production agent experience" in suggestion["notes"]
+    assert suggestion["status"] != "Strong evidence"
+
+
+def test_evidence_suggestion_helper_respects_use_carefully_skills() -> None:
+    cloud_suggestion = _suggest_evidence_for_requirement(
+        PROFILE_TEXT,
+        "Cloud tools or deployment experience",
+    )
+    dotnet_suggestion = _suggest_evidence_for_requirement(
+        PROFILE_TEXT,
+        "C# / .NET 5+ professional experience",
+    )
+    angular_suggestion = _suggest_evidence_for_requirement(
+        PROFILE_TEXT,
+        "Angular 16+ and TypeScript",
+    )
+
+    assert cloud_suggestion["status"] in {"Not sure", "No evidence"}
+    assert "use carefully" in cloud_suggestion["notes"]
+    assert dotnet_suggestion["status"] in {"Not sure", "No evidence"}
+    assert "use carefully" in dotnet_suggestion["notes"]
+    assert angular_suggestion["status"] in {"Not sure", "No evidence"}
+    assert "use carefully" in angular_suggestion["notes"]
+
+
+def test_evidence_suggestions_are_not_all_not_sure_when_profile_has_matches() -> None:
+    requirements = [
+        "Python scripting/development",
+        "API integration experience",
+        "Cloud tools or deployment experience",
+        "LLM / large language model workflow experience",
+    ]
+    suggestions = _suggest_evidence_answers(
+        {"resume_text": PROFILE_TEXT},
+        requirements,
+    )
+    counts = _evidence_suggestion_counts(suggestions)
+
+    assert counts["Some evidence"] + counts["Strong evidence"] >= 3
+    assert suggestions["Cloud tools or deployment experience"]["status"] == "Not sure"

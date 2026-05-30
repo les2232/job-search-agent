@@ -881,7 +881,9 @@ def _tailored_resume_bullets(
         requirement = item["requirement"]
         notes = item["notes"]
         if notes:
-            bullets.append(f"Connected {requirement} to verified evidence: {notes}")
+            bullets.append(
+                f"Review and, if true, connect {requirement} to evidence: {notes}"
+            )
         else:
             bullets.append(f"Emphasized {requirement} only where the resume or project notes support it.")
     if not bullets and profile_text:

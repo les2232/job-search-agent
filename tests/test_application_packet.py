@@ -536,3 +536,35 @@ def test_tailored_resume_does_not_claim_unsupported_fei_requirements() -> None:
     assert "Connected C# / .NET" not in tailored_resume
     assert "Connected Angular" not in tailored_resume
     assert "pytest tests in Python projects" in tailored_resume
+
+
+def test_tailored_resume_treats_auto_suggested_evidence_as_reviewable() -> None:
+    packet = generate_application_packet(
+        _arrivia_score_result(),
+        (
+            "Profile includes Python scripts, SQL reports, REST APIs, OpenAI API, "
+            "prompt engineering, workflow automation, documentation, and IT support."
+        ),
+        evidence_answers={
+            "Python scripting/development": {
+                "status": "Strong evidence",
+                "notes": (
+                    "Auto-suggested from profile: Profile mentions Python scripts "
+                    "and local automation tools. Verify exact examples before using."
+                ),
+            },
+            "API integration": {
+                "status": "Some evidence",
+                "notes": (
+                    "Auto-suggested from profile: Profile mentions REST APIs/JSON. "
+                    "Confirm concrete examples."
+                ),
+            },
+        },
+    )
+    tailored_resume = packet["tailored_resume_draft"]
+
+    assert "Review and, if true, connect Python scripting/development to evidence" in tailored_resume
+    assert "Auto-suggested from profile" in tailored_resume
+    assert "Connected Python scripting/development to verified evidence" not in tailored_resume
+    assert "Confirm every claim is true." in tailored_resume
