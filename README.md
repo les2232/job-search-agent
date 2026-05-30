@@ -212,6 +212,10 @@ result and optional local profile text. It includes:
 - application checklist
 - risk notes
 
+The cover letter draft is employer-facing. Internal cautions and verification
+reminders stay in the risk notes, checklist, score explanation, and resume
+tailoring notes.
+
 Saved packets go under:
 
 ```text
@@ -288,7 +292,7 @@ Ignored local files and folders include:
 Do not commit real resumes, personal job leads, generated cover letters,
 application notes, credentials, or private profile data.
 
-Generated drafts include the warning:
+Risk notes and review checklists include the warning:
 
 ```text
 Draft only. Review carefully before using. Do not include claims you cannot verify.

@@ -282,37 +282,34 @@ def _build_cover_letter_draft(
     strongest_matches: list[str],
     recommendation: str,
 ) -> str:
-    match_text = _format_inline_list(strongest_matches[:3], "support and documentation")
+    interest_text = _format_inline_list(
+        strongest_matches[:3],
+        "the practical technical needs of the role",
+    )
     location_note = _build_location_note(metadata)
-    priority_note = ""
-    if recommendation != "Apply":
-        priority_note = (
-            " I would review the role requirements carefully and keep the final letter "
-            "focused only on experience I can verify."
-        )
+    maybe_note = _build_maybe_cover_letter_note(recommendation, role_label)
 
     return "\n".join(
         [
-            REVIEW_WARNING,
-            "",
             "Dear Hiring Team,",
             "",
             (
-                f"I am interested in {role_label} at {company_label}."
-                f"{location_note}"
+                f"I am interested in the {role_label} role at {company_label}."
+                f"{location_note} The work stands out to me because it combines "
+                f"{interest_text} with dependable follow-through and clear communication."
             ),
             "",
             (
                 "My background includes local IT support, user communication, "
-                f"troubleshooting, and documentation work that appears relevant to {match_text}. "
-                "I would tailor my resume around the examples that are most directly supported "
-                "by my experience and project notes."
+                "troubleshooting, and documentation. I have worked in settings where "
+                "clear notes, steady coordination, and practical problem solving matter, "
+                "and I would bring that same support-focused approach to this position."
             ),
             "",
             (
-                "This role seems aligned with practical support work, clear documentation, "
-                "and steady follow-through."
-                f"{priority_note}"
+                "I am especially drawn to roles where technical work is paired with "
+                "good communication, careful handoffs, and useful documentation."
+                f"{maybe_note}"
             ),
             "",
             "Thank you for your consideration.",
@@ -321,14 +318,22 @@ def _build_cover_letter_draft(
 
 
 def _build_location_note(metadata: dict[str, str]) -> str:
-    parts = []
-    if _is_known(metadata["location"]):
-        parts.append(metadata["location"])
-    if _is_known(metadata["work_mode"]):
-        parts.append(metadata["work_mode"])
-    if not parts:
+    location = metadata["location"]
+    work_mode = metadata["work_mode"]
+    if _is_known(work_mode):
+        return f" The {work_mode.lower()} work format is also appealing."
+    if _is_known(location):
+        return f" The {location} location is also appealing."
+    return ""
+
+
+def _build_maybe_cover_letter_note(recommendation: str, role_label: str) -> str:
+    if recommendation != "Maybe":
         return ""
-    return " The posting appears to be connected to " + " / ".join(parts) + "."
+    return (
+        f" I would welcome the chance to learn more about how {role_label} "
+        "supports the team and where my technical support background could be useful."
+    )
 
 
 def _build_recruiter_message(

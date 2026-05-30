@@ -30,6 +30,38 @@ def _score_result(
     }
 
 
+def _fei_score_result() -> dict[str, object]:
+    return {
+        "job_metadata": {
+            "title": "Full-Stack Developer",
+            "company": "FEI Systems",
+            "location": "Remote",
+            "work_mode": "Remote",
+        },
+        "score": 65,
+        "recommendation": "Maybe",
+        "matched_keywords": ["sql", "git", "remote"],
+        "missing_keywords": [
+            "python",
+            "api",
+            "apis",
+            "automation",
+            "dashboard",
+            "dashboards",
+            "data",
+            "linux",
+        ],
+        "concerns": [],
+        "explanation": {
+            "fit_summary": "Possible fit with gaps to review.",
+            "strengths": ["Matched fit keywords: sql, git, remote"],
+            "gaps": ["Potential gaps to review: python, api, linux."],
+            "concerns": ["No concern keywords or metadata issues were found."],
+            "tailoring_suggestions": ["Review gaps before applying."],
+        },
+    }
+
+
 def test_generate_application_packet_high_score() -> None:
     packet = generate_application_packet(
         _score_result(85, "Apply"),
@@ -101,4 +133,53 @@ def test_generate_application_packet_bullets_are_editable_suggestions() -> None:
 
     assert len(bullets) >= 3
     assert all(str(bullet).startswith("Suggested bullet:") for bullet in bullets)
-    assert REVIEW_WARNING in packet["cover_letter_draft"]
+    assert REVIEW_WARNING in packet["risk_notes"]
+
+
+def test_cover_letter_draft_is_employer_facing_without_internal_warnings() -> None:
+    packet = generate_application_packet(
+        _fei_score_result(),
+        (
+            "Local IT support, user communication, troubleshooting, documentation, "
+            "and classroom AV troubleshooting."
+        ),
+    )
+    cover_letter = packet["cover_letter_draft"]
+
+    assert "FEI Systems" in cover_letter
+    assert "Full-Stack Developer" in cover_letter
+    assert "Draft only" not in cover_letter
+    assert "verify" not in cover_letter.lower()
+    assert "tailor my resume" not in cover_letter.lower()
+    assert "Remote / Remote" not in cover_letter
+
+
+def test_maybe_cover_letter_is_polished_but_cautious() -> None:
+    packet = generate_application_packet(
+        _fei_score_result(),
+        "Local IT support, user communication, troubleshooting, and documentation.",
+    )
+    cover_letter = packet["cover_letter_draft"]
+
+    assert "I would welcome the chance to learn more" in cover_letter
+    assert "technical support background could be useful" in cover_letter
+    assert "Maybe" not in cover_letter
+
+
+def test_cover_letter_does_not_claim_missing_keywords_as_experience() -> None:
+    packet = generate_application_packet(
+        _fei_score_result(),
+        "Local IT support, user communication, troubleshooting, and documentation.",
+    )
+    cover_letter = packet["cover_letter_draft"].lower()
+
+    for missing_keyword in ["python", "api", "automation", "dashboard", "data", "linux"]:
+        assert missing_keyword not in cover_letter
+
+
+def test_safety_reminders_stay_outside_cover_letter() -> None:
+    packet = generate_application_packet(_fei_score_result())
+
+    assert REVIEW_WARNING in packet["risk_notes"]
+    assert any("only where your resume/profile supports them" in item for item in packet["application_checklist"])
+    assert REVIEW_WARNING not in packet["cover_letter_draft"]
