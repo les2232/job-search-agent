@@ -338,7 +338,7 @@ def _show_saved_packet_review(
 
     saved_packets = sort_saved_application_packets(saved_packets, "Newest saved first")
     table_rows = [_saved_packet_table_row(packet) for packet in saved_packets]
-    st.dataframe(table_rows, use_container_width=True, hide_index=True)
+    st.dataframe(table_rows, width="stretch", hide_index=True)
 
     packet_options = {
         _format_saved_packet_label(packet): packet
@@ -356,7 +356,7 @@ def _show_saved_packet_review(
         return
 
     st.caption(f"Saved folder: {packet_details['folder_path']}")
-    _show_saved_packet_status_controls(packet_details)
+    _show_saved_packet_status_controls(packet_details, key_prefix="guided_saved_status")
     _show_packet_preview(
         packet_details["application_packet"],
         packet_details["score_summary"],
@@ -487,7 +487,7 @@ def _show_score_job_tab(
     st.caption(f"Scoring with profile: {profile['display_name']}")
     job_text = _get_job_text_input("score")
 
-    if st.button("Score job", type="primary"):
+    if st.button("Score job", type="primary", key="score_job_button"):
         if not job_text.strip():
             st.error("Paste a job posting or upload a .txt file before scoring.")
         else:
@@ -508,7 +508,7 @@ def _show_score_job_tab(
 
     _show_score_summary(job, score_details, profile, applications_dir)
 
-    if st.button("Save to tracker"):
+    if st.button("Save to tracker", key="score_save_to_tracker"):
         save_result = save_job_result(JOBS_CSV_PATH, job, score_details)
         st.session_state["save_message"] = save_result
 
@@ -535,10 +535,15 @@ def _show_tracker_tab(tracked_jobs: list[dict[str, str]]) -> None:
     )
 
     filter_cols = st.columns(2)
-    selected_status = filter_cols[0].selectbox("Status", status_options)
+    selected_status = filter_cols[0].selectbox(
+        "Status",
+        status_options,
+        key="tracker_filter_status",
+    )
     selected_recommendation = filter_cols[1].selectbox(
         "Recommendation",
         recommendation_options,
+        key="tracker_filter_recommendation",
     )
 
     filtered_jobs = filter_tracked_jobs(
@@ -560,7 +565,7 @@ def _show_tracker_tab(tracked_jobs: list[dict[str, str]]) -> None:
             f"{len(high_priority_jobs)} high-priority job(s): Apply recommendation and New status."
         )
 
-    st.dataframe(filtered_jobs, use_container_width=True, hide_index=True)
+    st.dataframe(filtered_jobs, width="stretch", hide_index=True)
     _show_status_update_controls(filtered_jobs)
 
 
@@ -570,13 +575,15 @@ def _show_application_packets_tab(profile: dict[str, object]) -> None:
     job_path_text = st.text_input(
         "Job posting file path",
         value=str(PROJECT_ROOT / "data" / "sample_job.txt"),
+        key="legacy_packet_job_path",
     )
     resume_path_text = st.text_input(
         "Local resume/profile path",
         value=str(profile.get("resume_path") or DEFAULT_RESUME_PATH),
+        key="legacy_packet_resume_path",
     )
 
-    if st.button("Generate packet", type="primary"):
+    if st.button("Generate packet", type="primary", key="legacy_generate_packet"):
         try:
             result = generate_application_materials(
                 Path(job_path_text),
@@ -601,6 +608,7 @@ def _show_application_packets_tab(profile: dict[str, object]) -> None:
         "Packet folder",
         packet_dirs,
         format_func=lambda path: path.name,
+        key="legacy_packet_folder",
     )
     st.write(str(selected_packet))
 
@@ -655,13 +663,17 @@ def _show_saved_applications_tab(
         }
         for packet in filtered_packets
     ]
-    st.dataframe(table_rows, use_container_width=True, hide_index=True)
+    st.dataframe(table_rows, width="stretch", hide_index=True)
 
     packet_options = {
         _format_saved_packet_label(packet): packet
         for packet in filtered_packets
     }
-    selected_label = st.selectbox("View packet details", list(packet_options))
+    selected_label = st.selectbox(
+        "View packet details",
+        list(packet_options),
+        key="advanced_saved_packet_details",
+    )
     selected_packet = packet_options[selected_label]
     packet_details = load_saved_application_packet(selected_packet["folder_path"])
     if packet_details is None:
@@ -669,7 +681,7 @@ def _show_saved_applications_tab(
         return
 
     st.caption(f"Saved folder: {packet_details['folder_path']}")
-    _show_saved_packet_status_controls(packet_details)
+    _show_saved_packet_status_controls(packet_details, key_prefix="advanced_saved_status")
     _show_saved_packet_details(packet_details["application_packet"])
 
 
@@ -698,18 +710,32 @@ def _show_saved_application_filters(
     )
 
     filter_cols = st.columns(4)
-    selected_status = filter_cols[0].selectbox("Status", status_options)
+    selected_status = filter_cols[0].selectbox(
+        "Status",
+        status_options,
+        key="saved_filter_status",
+    )
     selected_recommendation = filter_cols[1].selectbox(
         "Recommendation",
         recommendation_options,
+        key="saved_filter_recommendation",
     )
-    selected_work_mode = filter_cols[2].selectbox("Work mode", work_mode_options)
-    selected_sort = filter_cols[3].selectbox("Sort", SORT_OPTIONS)
+    selected_work_mode = filter_cols[2].selectbox(
+        "Work mode",
+        work_mode_options,
+        key="saved_filter_work_mode",
+    )
+    selected_sort = filter_cols[3].selectbox(
+        "Sort",
+        SORT_OPTIONS,
+        key="saved_filter_sort",
+    )
 
     search_cols = st.columns(4)
     selected_apply_recommendation = search_cols[0].selectbox(
         "Apply recommendation",
         apply_recommendation_options,
+        key="saved_filter_apply_recommendation",
     )
     min_score = search_cols[1].number_input(
         "Minimum score",
@@ -717,13 +743,29 @@ def _show_saved_application_filters(
         max_value=100,
         value=0,
         step=5,
+        key="saved_filter_min_score",
     )
-    company_search = search_cols[2].text_input("Company search")
-    text_search = search_cols[3].text_input("Title/company search")
+    company_search = search_cols[2].text_input(
+        "Company search",
+        key="saved_filter_company_search",
+    )
+    text_search = search_cols[3].text_input(
+        "Title/company search",
+        key="saved_filter_text_search",
+    )
     attention_cols = st.columns(3)
-    needs_attention = attention_cols[0].checkbox("Needs attention")
-    overdue = attention_cols[1].checkbox("Overdue")
-    due_within_7_days = attention_cols[2].checkbox("Due within 7 days")
+    needs_attention = attention_cols[0].checkbox(
+        "Needs attention",
+        key="saved_filter_needs_attention",
+    )
+    overdue = attention_cols[1].checkbox(
+        "Overdue",
+        key="saved_filter_overdue",
+    )
+    due_within_7_days = attention_cols[2].checkbox(
+        "Due within 7 days",
+        key="saved_filter_due_within_7_days",
+    )
 
     filtered_packets = filter_saved_application_packets(
         saved_packets,
@@ -747,10 +789,14 @@ def _show_saved_application_filters(
     return sort_saved_application_packets(filtered_packets, selected_sort)
 
 
-def _show_saved_packet_status_controls(packet_details: dict[str, object]) -> None:
+def _show_saved_packet_status_controls(
+    packet_details: dict[str, object],
+    key_prefix: str,
+) -> None:
     tracking = packet_details.get("application_tracking")
     if not isinstance(tracking, dict):
         tracking = {}
+    widget_key = _packet_widget_key(packet_details, key_prefix)
 
     current_status = str(tracking.get("status", "Interested"))
     if current_status not in APPLICATION_STATUSES:
@@ -761,20 +807,24 @@ def _show_saved_packet_status_controls(packet_details: dict[str, object]) -> Non
         "Status",
         APPLICATION_STATUSES,
         index=APPLICATION_STATUSES.index(current_status),
+        key=f"{widget_key}_status",
     )
     notes = st.text_area(
         "Notes",
         value=str(tracking.get("notes") or ""),
         height=90,
+        key=f"{widget_key}_notes",
     )
     next_action_date = st.text_input(
         "Next action date",
         value=str(tracking.get("next_action_date") or ""),
         placeholder="YYYY-MM-DD",
+        key=f"{widget_key}_next_action_date",
     )
     next_action_note = st.text_input(
         "Next action note",
         value=str(tracking.get("next_action_note") or ""),
+        key=f"{widget_key}_next_action_note",
     )
 
     applied_date = None
@@ -783,9 +833,10 @@ def _show_saved_packet_status_controls(packet_details: dict[str, object]) -> Non
             "Applied date",
             value=str(tracking.get("applied_date") or ""),
             placeholder="YYYY-MM-DD",
+            key=f"{widget_key}_applied_date",
         )
 
-    if st.button("Update application status"):
+    if st.button("Update application status", key=f"{widget_key}_update"):
         result = update_application_tracking(
             packet_details["folder_path"],
             status,
@@ -841,7 +892,11 @@ def _show_profile_selector() -> dict[str, object]:
         _format_profile_label(profile): profile
         for profile in profiles
     }
-    selected_label = st.selectbox("Profile", list(profile_options))
+    selected_label = st.selectbox(
+        "Profile",
+        list(profile_options),
+        key="profile_selector",
+    )
     profile = profile_options[selected_label]
 
     st.caption(f"Profile ID: {profile['profile_id']} | Source: {profile['source']}")
@@ -928,7 +983,7 @@ def _show_application_packet_prompt(
     applications_dir: Path,
 ) -> None:
     st.subheader("Application packet")
-    if st.button("Generate application packet"):
+    if st.button("Generate application packet", key="score_generate_application_packet"):
         st.session_state["score_application_packet"] = generate_application_packet(
             score_details,
             profile.get("resume_text"),
@@ -945,7 +1000,7 @@ def _show_application_packet_prompt(
 
     st.write(packet["positioning_summary"])
     st.info(str(packet["apply_recommendation"]))
-    if st.button("Save application packet"):
+    if st.button("Save application packet", key="score_save_application_packet"):
         save_result = save_application_packet(packet, score_details, applications_dir)
         st.session_state["saved_score_application_packet"] = save_result
 
@@ -1019,10 +1074,18 @@ def _show_status_update_controls(filtered_jobs: list[dict[str, str]]) -> None:
         _format_job_label(row): row
         for row in filtered_jobs
     }
-    selected_label = st.selectbox("Job", list(job_options))
-    new_status = st.selectbox("New status", STATUS_OPTIONS)
+    selected_label = st.selectbox(
+        "Job",
+        list(job_options),
+        key="tracker_status_job",
+    )
+    new_status = st.selectbox(
+        "New status",
+        STATUS_OPTIONS,
+        key="tracker_new_status",
+    )
 
-    if st.button("Update status"):
+    if st.button("Update status", key="tracker_update_status"):
         selected_job = job_options[selected_label]
         result = update_job_status(
             JOBS_CSV_PATH,
@@ -1120,6 +1183,15 @@ def _format_list(value: object) -> str:
     if isinstance(value, list) and value:
         return ", ".join(str(item) for item in value)
     return "None"
+
+
+def _packet_widget_key(packet_details: dict[str, object], prefix: str) -> str:
+    folder_path = str(packet_details.get("folder_path", "unknown_packet"))
+    safe_path = "".join(
+        character if character.isalnum() else "_"
+        for character in folder_path
+    ).strip("_")
+    return f"{prefix}_{safe_path or 'unknown_packet'}"
 
 
 def _job_requirement_list(score_details: dict[str, object], key: str) -> list[str]:
