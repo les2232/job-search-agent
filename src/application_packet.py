@@ -58,6 +58,15 @@ def generate_application_packet(
         display_requirements_to_verify,
     )
     stretch_warning = _build_stretch_warning(display_requirements_to_verify)
+    resume_strategy_sections = _build_resume_strategy_sections(
+        display_role_label,
+        company_label,
+        recommendation,
+        supported_overlap,
+        display_requirements_to_verify,
+        profile_themes,
+        stretch_warning,
+    )
 
     return {
         "positioning_summary": _build_positioning_summary(
@@ -80,13 +89,17 @@ def generate_application_packet(
             display_requirements_to_verify,
             stretch_warning,
         ),
+        "resume_strategy_sections": resume_strategy_sections,
         "resume_bullet_suggestions": _build_resume_bullet_suggestions(
             strongest_matches,
             profile_themes,
             supported_overlap,
             display_requirements_to_verify,
         ),
-        "keywords_to_include_honestly": matched_keywords[:8],
+        "keywords_to_include_honestly": _build_keywords_to_include_honestly(
+            matched_keywords,
+            profile_themes,
+        ),
         "keywords_to_avoid_or_verify": gaps_to_review[:8],
         "cover_letter_draft": _build_cover_letter_draft(
             display_role_label,
@@ -298,6 +311,120 @@ def _build_resume_focus_areas(
     return focus_areas
 
 
+def _build_resume_strategy_sections(
+    role_label: str,
+    company_label: str,
+    recommendation: str,
+    supported_overlap: list[str],
+    requirements_to_verify: list[str],
+    profile_themes: list[str],
+    stretch_warning: str,
+) -> dict[str, object]:
+    fit_verdict = "Stretch Role" if stretch_warning else "Review Fit"
+    if recommendation == "Apply" and not stretch_warning:
+        fit_verdict = "Strong Target"
+    elif recommendation == "Skip" and not stretch_warning:
+        fit_verdict = "Lower Priority"
+
+    fit_summary = (
+        f"{role_label} at {company_label} is likely a stretch unless the candidate "
+        "has direct evidence for the main hard requirements."
+        if stretch_warning
+        else f"{role_label} at {company_label} should be reviewed against verified resume evidence before applying."
+    )
+
+    return {
+        "fit_verdict": fit_verdict,
+        "fit_summary": fit_summary,
+        "apply_recommendation": _build_apply_recommendation(
+            recommendation,
+            requirements_to_verify,
+        ),
+        "supported_overlap": _build_supported_overlap_items(supported_overlap),
+        "major_requirements_to_verify": requirements_to_verify,
+        "transferable_support_evidence": _build_transferable_support_items(profile_themes),
+        "apply_only_if": _build_apply_only_if_items(requirements_to_verify),
+        "consider_skipping_if": _build_consider_skipping_items(requirements_to_verify),
+    }
+
+
+def _build_supported_overlap_items(supported_overlap: list[str]) -> list[str]:
+    if not supported_overlap:
+        return ["Use only profile details and project examples the candidate can verify."]
+
+    items = []
+    for value in supported_overlap:
+        mapped = {
+            "Git/version control, if supported by the candidate's profile or projects": (
+                "Git/version control, if supported by coursework, scripts, or software projects."
+            ),
+            "SQL/database work, if supported by database, query, reporting, or data-backed troubleshooting examples": (
+                "SQL/database work, if supported by database queries, reports, or data-backed troubleshooting."
+            ),
+            "remote collaboration": "Remote collaboration and clear communication.",
+            "documentation": "Technical documentation.",
+            "user-facing technical troubleshooting": "User-facing technical troubleshooting and documentation.",
+            "follow-through in support workflows": "Follow-through in systems used by real users.",
+            "user-facing technical support translated as understanding user needs and supporting reliable systems": (
+                "User-facing technical support translated as evidence of understanding user needs and supporting reliable systems."
+            ),
+        }.get(value, value)
+        if not mapped.endswith("."):
+            mapped += "."
+        items.append(mapped)
+    return _dedupe(items)
+
+
+def _build_transferable_support_items(profile_themes: list[str]) -> list[str]:
+    if "classroom/AV troubleshooting" in profile_themes:
+        return [
+            (
+                "Frame support work as user-facing technical troubleshooting, "
+                "documentation, clear communication, and support for systems used by real users."
+            ),
+            (
+                "Do not present support, classroom, or AV troubleshooting as software "
+                "development experience."
+            ),
+        ]
+    if profile_themes:
+        return [
+            (
+                "Use concrete examples from verified profile themes such as "
+                + _format_inline_list(profile_themes[:5], "profile themes")
+                + "."
+            )
+        ]
+    return ["Keep transferable evidence broad unless the resume supports a more specific claim."]
+
+
+def _build_apply_only_if_items(requirements_to_verify: list[str]) -> list[str]:
+    if not requirements_to_verify:
+        return ["The candidate can support the main role requirements with real examples."]
+    return [
+        (
+            "The candidate can show direct evidence of .NET/C#, Angular/TypeScript, "
+            "or comparable full-stack development work."
+        ),
+        "The candidate can explain SQL/database work clearly.",
+        (
+            "The candidate has projects, coursework, or professional examples "
+            "involving testing, architecture, APIs, or cloud services."
+        ),
+        "The candidate is comfortable positioning this as a stretch role.",
+    ]
+
+
+def _build_consider_skipping_items(requirements_to_verify: list[str]) -> list[str]:
+    if not requirements_to_verify:
+        return ["The role is not worth the tailoring time or does not support the candidate's goals."]
+    return [
+        "The candidate's experience is mostly IT support with little software development evidence.",
+        "The candidate cannot support the required years of full-stack development.",
+        "The candidate would be relying almost entirely on transferable skills.",
+    ]
+
+
 def _build_resume_bullet_suggestions(
     strongest_matches: list[str],
     profile_themes: list[str],
@@ -330,6 +457,32 @@ def _build_resume_bullet_suggestions(
             "technical support, troubleshooting, documentation, and follow-through."
         )
     return bullets[:5]
+
+
+def _build_keywords_to_include_honestly(
+    matched_keywords: list[str],
+    profile_themes: list[str],
+) -> list[str]:
+    normalized_keywords = {keyword.lower() for keyword in matched_keywords}
+    labels = []
+    if "sql" in normalized_keywords or "database" in normalized_keywords:
+        labels.append("SQL / database-backed troubleshooting, only if supported.")
+    if "git" in normalized_keywords or "github" in normalized_keywords:
+        labels.append("Git / version control, only if supported.")
+    if "remote" in normalized_keywords:
+        labels.append("Remote collaboration.")
+    if "documentation" in normalized_keywords or "documentation" in profile_themes:
+        labels.append("Technical documentation.")
+    if any(theme in profile_themes for theme in ["frontline IT support", "classroom/AV troubleshooting"]):
+        labels.append("User-facing troubleshooting.")
+    if profile_themes or "remote" in normalized_keywords:
+        labels.append("Clear communication and follow-through.")
+    for keyword in matched_keywords:
+        if keyword.lower() not in {"sql", "database", "git", "github", "remote", "documentation"}:
+            label = f"{keyword.title()}, only if supported."
+            if label not in labels:
+                labels.append(label)
+    return labels[:8]
 
 
 def _build_cover_letter_draft(

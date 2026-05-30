@@ -7,6 +7,26 @@ from application_packet_writer import (
     safe_slug,
     save_application_packet,
 )
+from application_packet import generate_application_packet
+from job_scorer import extract_job_requirements
+
+
+FEI_JOB_TEXT = """
+FEI Systems builds technology solutions for health and human services.
+We are looking for a Full-Stack Developer to work on case management software.
+
+Required Skills/Experience
+- 4+ years C#/.NET software development experience
+- 3+ years Angular 16+ and TypeScript development
+- SQL Server or relational database experience
+- Git, Azure DevOps, and CI/CD pipelines
+- 1+ years AWS serverless or similar cloud services
+- Object-oriented design patterns
+- Domain Driven Design
+- Service Oriented Architecture
+- Unit testing
+- Test Driven Development
+"""
 
 
 def _packet() -> dict[str, object]:
@@ -50,6 +70,31 @@ def _score_result(
             "concerns": ["No concern keywords or metadata issues were found."],
             "tailoring_suggestions": ["Emphasize verified experience."],
         },
+    }
+
+
+def _fei_score_result() -> dict[str, object]:
+    return {
+        "job_metadata": {
+            "title": "Full-Stack Developer Who Shares Our Commitment",
+            "company": "FEI Systems",
+            "location": "Remote",
+            "work_mode": "Remote",
+        },
+        "score": 65,
+        "recommendation": "Maybe",
+        "matched_keywords": ["sql", "git", "remote"],
+        "missing_keywords": ["python", "dashboard", "linux"],
+        "concerns": [],
+        "explanation": {
+            "fit_summary": "Possible fit with gaps to review.",
+            "strengths": ["Matched fit keywords: sql, git, remote"],
+            "gaps": ["Potential gaps to review: python, dashboard, linux."],
+            "concerns": ["No concern keywords or metadata issues were found."],
+            "tailoring_suggestions": ["Review gaps before applying."],
+        },
+        "job_requirements": extract_job_requirements(FEI_JOB_TEXT),
+        "raw_text": FEI_JOB_TEXT,
     }
 
 
@@ -173,3 +218,51 @@ def test_save_application_packet_can_write_under_profile_folder(tmp_path: Path) 
 
     assert result["folder_path"].parent == profile_root
     assert result["folder_path"].exists()
+
+
+def test_resume_tailoring_notes_are_scannable_strategy_packet(tmp_path: Path) -> None:
+    packet = generate_application_packet(
+        _fei_score_result(),
+        (
+            "Local IT support, user communication, troubleshooting, documentation, "
+            "classroom AV troubleshooting, git, and SQL."
+        ),
+    )
+    result = save_application_packet(
+        packet,
+        _fei_score_result(),
+        tmp_path,
+        packet_date=date(2026, 5, 29),
+    )
+
+    notes = result["output_paths"]["resume_tailoring_notes"].read_text(encoding="utf-8")
+
+    assert "## Fit Verdict" in notes
+    assert "Stretch Role" in notes
+    assert "Full-Stack Developer at FEI Systems" in notes
+    assert "Full-Stack Developer Who Shares Our Commitment" not in notes
+    assert "## Apply Recommendation" in notes
+    assert "## Strong / Supported Overlap" in notes
+    assert "- Git/version control, if supported by coursework, scripts, or software projects." in notes
+    assert "- SQL/database work, if supported by database queries, reports, or data-backed troubleshooting." in notes
+    assert "## Major Requirements To Verify Before Applying" in notes
+    assert "- C# / .NET 5+ professional experience" in notes
+    assert "- Angular 16+ and TypeScript" in notes
+    assert "- AWS serverless or similar cloud services" in notes
+    assert "- Domain Driven Design and Service Oriented Architecture" in notes
+    assert "- Unit testing and Test Driven Development" in notes
+    assert "- Required years of full-stack software development experience" in notes
+    assert "## Transferable Support Evidence" in notes
+    assert "Do not present support, classroom, or AV troubleshooting as software development experience." in notes
+    assert "## Apply Only If" in notes
+    assert "## Consider Skipping Or Deprioritizing If" in notes
+    assert "## Suggested Resume Bullets" in notes
+    assert "Use only if true:" in notes
+    assert "## Keywords / Themes To Include Honestly" in notes
+    assert "- SQL / database-backed troubleshooting, only if supported." in notes
+    assert "- Git / version control, only if supported." in notes
+    assert "## Keywords To Verify Or Avoid" in notes
+    assert "Draft only. Review carefully before using." in notes
+    assert "python" not in notes.lower()
+    assert "dashboard" not in notes.lower()
+    assert "linux" not in notes.lower()

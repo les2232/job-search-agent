@@ -184,6 +184,10 @@ def _build_score_explanation(score_result: dict[str, object]) -> str:
 
 
 def _build_resume_tailoring_notes(packet: dict[str, object]) -> str:
+    strategy_sections = packet.get("resume_strategy_sections")
+    if isinstance(strategy_sections, dict):
+        return _build_structured_resume_tailoring_notes(packet, strategy_sections)
+
     return "\n".join(
         [
             "# Resume Tailoring Notes",
@@ -209,6 +213,82 @@ def _build_resume_tailoring_notes(packet: dict[str, object]) -> str:
             "",
         ]
     )
+
+
+def _build_structured_resume_tailoring_notes(
+    packet: dict[str, object],
+    strategy_sections: dict[object, object],
+) -> str:
+    return "\n".join(
+        [
+            "# Resume Tailoring Notes",
+            "",
+            "## Fit Verdict",
+            "",
+            f"{strategy_sections.get('fit_verdict', 'Review Fit')}",
+            "",
+            str(strategy_sections.get("fit_summary", "")).strip(),
+            "",
+            "## Apply Recommendation",
+            "",
+            str(
+                strategy_sections.get(
+                    "apply_recommendation",
+                    packet.get("apply_recommendation", ""),
+                )
+            ).strip(),
+            "",
+            _format_markdown_list(
+                "Strong / Supported Overlap",
+                strategy_sections.get("supported_overlap"),
+            ),
+            _format_markdown_list(
+                "Major Requirements To Verify Before Applying",
+                strategy_sections.get("major_requirements_to_verify"),
+            ),
+            _format_markdown_list(
+                "Transferable Support Evidence",
+                strategy_sections.get("transferable_support_evidence"),
+            ),
+            _format_markdown_list(
+                "Apply Only If",
+                strategy_sections.get("apply_only_if"),
+            ),
+            _format_markdown_list(
+                "Consider Skipping Or Deprioritizing If",
+                strategy_sections.get("consider_skipping_if"),
+            ),
+            _format_resume_bullets(packet.get("resume_bullet_suggestions")),
+            _format_markdown_list(
+                "Keywords / Themes To Include Honestly",
+                packet.get("keywords_to_include_honestly"),
+            ),
+            _format_markdown_list(
+                "Keywords To Verify Or Avoid",
+                packet.get("keywords_to_avoid_or_verify"),
+            ),
+            _format_markdown_list("Risk Notes", packet.get("risk_notes")),
+            "",
+        ]
+    )
+
+
+def _format_resume_bullets(values: object) -> str:
+    items = _as_string_list(values)
+    cleaned_items = []
+    lead_in = ""
+    for item in items:
+        if item.startswith("Use only if true:"):
+            lead_in = "Use only if true:"
+            item = item.removeprefix("Use only if true:").strip()
+        cleaned_items.append(item)
+    if not cleaned_items:
+        return "## Suggested Resume Bullets\n\n- None\n"
+    parts = ["## Suggested Resume Bullets", ""]
+    if lead_in:
+        parts.extend([lead_in, ""])
+    parts.extend(f"- {item}" for item in cleaned_items)
+    return "\n".join(parts) + "\n"
 
 
 def _build_application_checklist(packet: dict[str, object]) -> str:

@@ -91,7 +91,7 @@ def test_generate_application_packet_high_score() -> None:
 
     assert "strong target" in packet["positioning_summary"]
     assert packet["apply_recommendation"].startswith("Apply")
-    assert "python" in packet["keywords_to_include_honestly"]
+    assert any("Python" in item for item in packet["keywords_to_include_honestly"])
     assert len(packet["resume_bullet_suggestions"]) >= 3
 
 
@@ -256,6 +256,51 @@ def test_packet_highlights_fei_hard_requirements_to_verify() -> None:
     assert "AWS serverless" in risk_text
     assert "Domain Driven Design and Service Oriented Architecture" in risk_text
     assert "Unit testing and Test Driven Development" in risk_text
+
+
+def test_fei_resume_strategy_sections_are_scannable_and_bulleted() -> None:
+    packet = generate_application_packet(
+        _fei_score_result(),
+        (
+            "Local IT support, user communication, troubleshooting, documentation, "
+            "classroom AV troubleshooting, git, and SQL."
+        ),
+    )
+    strategy = packet["resume_strategy_sections"]
+
+    assert strategy["fit_verdict"] == "Stretch Role"
+    assert "Full-Stack Developer at FEI Systems" in strategy["fit_summary"]
+    assert "Full-Stack Developer Who Shares Our Commitment" not in strategy["fit_summary"]
+    assert "Git/version control, if supported by coursework" in " ".join(strategy["supported_overlap"])
+    assert "SQL/database work, if supported by database queries" in " ".join(strategy["supported_overlap"])
+    assert "C# / .NET 5+ professional experience" in strategy["major_requirements_to_verify"]
+    assert "Angular 16+ and TypeScript" in strategy["major_requirements_to_verify"]
+    assert "AWS serverless or similar cloud services" in strategy["major_requirements_to_verify"]
+    assert "Domain Driven Design and Service Oriented Architecture" in strategy["major_requirements_to_verify"]
+    assert "Unit testing and Test Driven Development" in strategy["major_requirements_to_verify"]
+    assert "Required years of full-stack software development experience" in strategy["major_requirements_to_verify"]
+    assert any("Do not present support, classroom, or AV troubleshooting" in item for item in strategy["transferable_support_evidence"])
+    assert len(strategy["apply_only_if"]) >= 4
+    assert len(strategy["consider_skipping_if"]) >= 3
+
+
+def test_fei_keywords_to_include_are_human_readable_themes() -> None:
+    packet = generate_application_packet(
+        _fei_score_result(),
+        (
+            "Local IT support, user communication, troubleshooting, documentation, "
+            "classroom AV troubleshooting, git, and SQL."
+        ),
+    )
+    keyword_text = " ".join(packet["keywords_to_include_honestly"])
+
+    assert "SQL / database-backed troubleshooting, only if supported." in packet["keywords_to_include_honestly"]
+    assert "Git / version control, only if supported." in packet["keywords_to_include_honestly"]
+    assert "Remote collaboration." in packet["keywords_to_include_honestly"]
+    assert "Technical documentation." in packet["keywords_to_include_honestly"]
+    assert "User-facing troubleshooting." in packet["keywords_to_include_honestly"]
+    assert "Clear communication and follow-through." in packet["keywords_to_include_honestly"]
+    assert keyword_text != "sql git remote"
 
 
 def test_packet_does_not_list_unrelated_config_keywords_as_fei_gaps() -> None:

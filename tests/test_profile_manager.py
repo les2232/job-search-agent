@@ -128,7 +128,7 @@ def test_profile_text_can_feed_packet_generation(tmp_path: Path) -> None:
 
     packet = generate_application_packet(_score_result(), profile["resume_text"])
 
-    assert "python" in packet["keywords_to_include_honestly"]
+    assert any("Python" in item for item in packet["keywords_to_include_honestly"])
     assert len(packet["resume_bullet_suggestions"]) >= 3
 
 
