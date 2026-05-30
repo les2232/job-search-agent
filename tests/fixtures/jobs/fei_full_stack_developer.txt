@@ -1,0 +1,24 @@
+Job Title: Full-Stack Developer
+Company: FEI Systems
+Location: Remote
+Work Mode: Remote
+Job Type: Full-time
+
+Full Job Description:
+FEI Systems builds technology solutions for health and human services.
+We are looking for a Full-Stack Developer to work on case management software.
+
+Required Skills/Experience
+- 4+ years C# / .NET 5+ software development experience
+- 3+ years Angular 16+ and TypeScript development
+- SQL Server or relational database experience
+- Git, Azure DevOps, and CI/CD pipelines
+- 1+ years AWS serverless or similar cloud services
+- Object-oriented design patterns
+- Domain Driven Design
+- Service Oriented Architecture
+- Unit testing
+- Test Driven Development
+
+This remote role requires clear communication, collaborative delivery, and
+careful documentation for mission-driven public service technology.

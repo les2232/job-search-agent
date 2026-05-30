@@ -1,0 +1,23 @@
+Job Title: AI Agent Builder
+Company: Arrivia, Inc.
+Location: Austin, TX
+Work Mode: Remote
+Job Type: Full-time
+
+Full Job Description:
+Arrivia, Inc. is hiring an AI Agent Builder to improve automation workflows for
+travel operations. This remote role will build AI agents and API integrations
+that connect internal systems, data workflows, and user-facing support tools.
+
+Required Skills/Experience
+- Python scripting or Python development
+- SQL and data workflows
+- APIs and API integration
+- Automation and workflow automation
+- AI agent or agentic workflow experience
+- LLM workflows and prompt engineering
+- OpenAI or similar agent-building tools and LLM platforms
+- Object-oriented design patterns
+
+The role requires clear documentation, practical troubleshooting, and remote
+collaboration with product and operations teams.

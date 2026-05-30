@@ -32,6 +32,27 @@ Run the local browser UI:
 streamlit run ui_app.py
 ```
 
+## Quick Smoke Test
+
+Run this when you want a fast end-to-end packet check without touching private
+profiles, `applications/`, or `data/jobs.csv`:
+
+```powershell
+python scripts\smoke_packet_flow.py --fixture all
+```
+
+You can also run one fixture at a time:
+
+```powershell
+python scripts\smoke_packet_flow.py --fixture arrivia_ai_agent
+python scripts\smoke_packet_flow.py --fixture fei_full_stack
+```
+
+The smoke test parses committed fixture postings, scores them, generates packets,
+writes them to a temporary directory, reads the Markdown/JSON back, and checks
+that the Arrivia AI-agent packet and FEI stretch-role packet include the expected
+role-specific guidance. It does not write real saved packets.
+
 ## Streamlit UI
 
 The UI is the easiest way to use the full workflow.
