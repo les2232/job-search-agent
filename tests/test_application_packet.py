@@ -33,7 +33,7 @@ def _score_result(
 def _fei_score_result() -> dict[str, object]:
     return {
         "job_metadata": {
-            "title": "Full-Stack Developer",
+            "title": "Full-Stack Developer Who Shares Our Commitment",
             "company": "FEI Systems",
             "location": "Remote",
             "work_mode": "Remote",
@@ -59,6 +59,11 @@ def _fei_score_result() -> dict[str, object]:
             "concerns": ["No concern keywords or metadata issues were found."],
             "tailoring_suggestions": ["Review gaps before applying."],
         },
+        "raw_text": (
+            "FEI Systems builds technology solutions for health and human services. "
+            "Our case management software helps improve access to care and support "
+            "through mission-driven public-impact technology."
+        ),
     }
 
 
@@ -148,10 +153,16 @@ def test_cover_letter_draft_is_employer_facing_without_internal_warnings() -> No
 
     assert "FEI Systems" in cover_letter
     assert "Full-Stack Developer" in cover_letter
+    assert "Full-Stack Developer Who Shares Our Commitment" not in cover_letter
     assert "Draft only" not in cover_letter
+    assert "Review carefully" not in cover_letter
     assert "verify" not in cover_letter.lower()
+    assert "claims you cannot" not in cover_letter.lower()
     assert "tailor my resume" not in cover_letter.lower()
+    assert "appears relevant" not in cover_letter.lower()
+    assert "posting appears" not in cover_letter.lower()
     assert "Remote / Remote" not in cover_letter
+    assert "sql, git, and remote" not in cover_letter.lower()
 
 
 def test_maybe_cover_letter_is_polished_but_cautious() -> None:
@@ -161,8 +172,8 @@ def test_maybe_cover_letter_is_polished_but_cautious() -> None:
     )
     cover_letter = packet["cover_letter_draft"]
 
-    assert "I would welcome the chance to learn more" in cover_letter
-    assert "technical support background could be useful" in cover_letter
+    assert "I am interested in learning more" in cover_letter
+    assert "where my background could be most useful" in cover_letter
     assert "Maybe" not in cover_letter
 
 
@@ -173,7 +184,19 @@ def test_cover_letter_does_not_claim_missing_keywords_as_experience() -> None:
     )
     cover_letter = packet["cover_letter_draft"].lower()
 
-    for missing_keyword in ["python", "api", "automation", "dashboard", "data", "linux"]:
+    for missing_keyword in [
+        "python",
+        "api",
+        "automation",
+        "dashboard",
+        "linux",
+        "c#",
+        ".net",
+        "angular",
+        "aws",
+        "domain driven",
+        "test driven",
+    ]:
         assert missing_keyword not in cover_letter
 
 
@@ -183,3 +206,17 @@ def test_safety_reminders_stay_outside_cover_letter() -> None:
     assert REVIEW_WARNING in packet["risk_notes"]
     assert any("only where your resume/profile supports them" in item for item in packet["application_checklist"])
     assert REVIEW_WARNING not in packet["cover_letter_draft"]
+
+
+def test_cover_letter_includes_company_mission_reason_when_available() -> None:
+    packet = generate_application_packet(
+        _fei_score_result(),
+        "Local IT support, user communication, troubleshooting, and documentation.",
+    )
+    cover_letter = packet["cover_letter_draft"]
+
+    assert "health and human services" in cover_letter
+    assert "support people who depend on those services" in cover_letter
+    assert "database-backed systems" in cover_letter
+    assert "version control" in cover_letter
+    assert "remote collaboration" in cover_letter

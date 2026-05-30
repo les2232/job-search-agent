@@ -32,9 +32,11 @@ def generate_application_packet(
     concerns = _as_string_list(score_result.get("concerns"))
     explanation = score_result.get("explanation")
     explanation_concerns = _explanation_list(explanation, "concerns")
+    source_text = _source_text(score_result)
 
     profile_themes = _find_profile_themes(profile_text)
     role_label = _role_label(metadata)
+    cover_role_label = _cover_role_label(role_label)
     company_label = _company_label(metadata)
     strongest_matches = _strongest_matches(matched_keywords, profile_themes)
     gaps_to_review = _gaps_to_review(missing_keywords, concerns)
@@ -63,11 +65,13 @@ def generate_application_packet(
         "keywords_to_include_honestly": matched_keywords[:8],
         "keywords_to_avoid_or_verify": gaps_to_review[:8],
         "cover_letter_draft": _build_cover_letter_draft(
-            role_label,
+            cover_role_label,
             company_label,
             metadata,
-            strongest_matches,
+            matched_keywords,
+            profile_themes,
             recommendation,
+            source_text,
         ),
         "recruiter_message": _build_recruiter_message(
             role_label,
@@ -122,6 +126,14 @@ def _as_string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if str(item).strip()]
+
+
+def _source_text(score_result: dict[str, object]) -> str:
+    for key in ["raw_text", "job_text", "job_description"]:
+        value = score_result.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    return ""
 
 
 def _explanation_list(explanation: object, key: str) -> list[str]:
@@ -279,14 +291,14 @@ def _build_cover_letter_draft(
     role_label: str,
     company_label: str,
     metadata: dict[str, str],
-    strongest_matches: list[str],
+    matched_keywords: list[str],
+    profile_themes: list[str],
     recommendation: str,
+    source_text: str,
 ) -> str:
-    interest_text = _format_inline_list(
-        strongest_matches[:3],
-        "the practical technical needs of the role",
-    )
-    location_note = _build_location_note(metadata)
+    company_reason = _build_company_reason(company_label, source_text)
+    role_needs = _build_role_needs_sentence(matched_keywords)
+    profile_strengths = _build_profile_strengths_sentence(profile_themes)
     maybe_note = _build_maybe_cover_letter_note(recommendation, role_label)
 
     return "\n".join(
@@ -295,45 +307,130 @@ def _build_cover_letter_draft(
             "",
             (
                 f"I am interested in the {role_label} role at {company_label}."
-                f"{location_note} The work stands out to me because it combines "
-                f"{interest_text} with dependable follow-through and clear communication."
+                f" {company_reason}"
             ),
             "",
             (
-                "My background includes local IT support, user communication, "
-                "troubleshooting, and documentation. I have worked in settings where "
-                "clear notes, steady coordination, and practical problem solving matter, "
-                "and I would bring that same support-focused approach to this position."
+                f"My background includes {profile_strengths}. In those settings, "
+                "I have worked to understand user needs, communicate clearly, and "
+                "support technical workflows with careful follow-through. "
+                f"{role_needs}"
             ),
             "",
             (
-                "I am especially drawn to roles where technical work is paired with "
-                "good communication, careful handoffs, and useful documentation."
+                "I would bring a service-minded technical perspective, strong "
+                "documentation habits, and a practical approach to solving problems "
+                "for users and teams."
                 f"{maybe_note}"
             ),
             "",
-            "Thank you for your consideration.",
+            (
+                "Thank you for your time and consideration. I would welcome the "
+                f"opportunity to discuss how my technical background and interest "
+                f"in this work could support {company_label}."
+            ),
         ]
     )
-
-
-def _build_location_note(metadata: dict[str, str]) -> str:
-    location = metadata["location"]
-    work_mode = metadata["work_mode"]
-    if _is_known(work_mode):
-        return f" The {work_mode.lower()} work format is also appealing."
-    if _is_known(location):
-        return f" The {location} location is also appealing."
-    return ""
 
 
 def _build_maybe_cover_letter_note(recommendation: str, role_label: str) -> str:
     if recommendation != "Maybe":
         return ""
     return (
-        f" I would welcome the chance to learn more about how {role_label} "
-        "supports the team and where my technical support background could be useful."
+        f" I am interested in learning more about how {role_label} supports "
+        "the team and where my background could be most useful."
     )
+
+
+def _cover_role_label(role_label: str) -> str:
+    if role_label == "this role":
+        return role_label
+    for separator in [" Who ", " who ", " With ", " with "]:
+        if separator in role_label:
+            return role_label.split(separator, 1)[0].strip()
+    return role_label
+
+
+def _build_company_reason(company_label: str, source_text: str) -> str:
+    mission = _mission_context(source_text)
+    if mission:
+        return (
+            f"I am drawn to {_possessive(company_label)} focus on {mission}, where reliable "
+            "systems, clear communication, and thoughtful problem solving can "
+            "support people who depend on those services."
+        )
+    return (
+        "I am drawn to technical work where reliable systems, clear communication, "
+        "and thoughtful problem solving help teams serve users well."
+    )
+
+
+def _mission_context(source_text: str) -> str:
+    normalized = source_text.lower()
+    if "health and human services" in normalized:
+        return "building technology for health and human services"
+    if "access to care" in normalized or "support" in normalized and "care" in normalized:
+        return "improving access to care and support"
+    if "case management" in normalized:
+        return "case management software for public services"
+    if "public" in normalized and ("service" in normalized or "impact" in normalized):
+        return "mission-driven public-impact technology"
+    return ""
+
+
+def _possessive(value: str) -> str:
+    if value.endswith("s"):
+        return f"{value}'"
+    return f"{value}'s"
+
+
+def _build_role_needs_sentence(matched_keywords: list[str]) -> str:
+    needs = _human_role_needs(matched_keywords)
+    if not needs:
+        return (
+            "That experience connects with roles that require dependable technical "
+            "work, collaboration, and clear documentation."
+        )
+    return (
+        "That experience connects with the role's emphasis on "
+        + _format_inline_list(needs[:3], "dependable technical work")
+        + "."
+    )
+
+
+def _human_role_needs(matched_keywords: list[str]) -> list[str]:
+    keyword_map = {
+        "sql": "database-backed systems",
+        "git": "version control",
+        "remote": "remote collaboration",
+        "documentation": "clear documentation",
+        "troubleshooting": "practical troubleshooting",
+        "support": "user support",
+        "ticket": "structured support workflows",
+    }
+    needs = []
+    for keyword in matched_keywords:
+        need = keyword_map.get(keyword.lower())
+        if need and need not in needs:
+            needs.append(need)
+    return needs
+
+
+def _build_profile_strengths_sentence(profile_themes: list[str]) -> str:
+    strengths = []
+    for theme in [
+        "frontline IT support",
+        "user communication",
+        "troubleshooting",
+        "documentation",
+        "classroom/AV troubleshooting",
+        "ticket workflows",
+    ]:
+        if theme in profile_themes or theme in {"user communication", "troubleshooting"}:
+            strengths.append(theme)
+    if not strengths:
+        return "technical support, user communication, troubleshooting, and documentation"
+    return _format_inline_list(strengths[:4], "technical support")
 
 
 def _build_recruiter_message(

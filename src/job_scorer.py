@@ -44,6 +44,7 @@ def score_job(
         "matched_keywords": matched_keywords,
         "concerns": concerns,
         "missing_keywords": missing_keywords,
+        "raw_text": text,
         "explanation": build_score_explanation(
             job,
             score,
