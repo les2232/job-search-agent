@@ -225,7 +225,32 @@ def _show_builder_analysis(
     if isinstance(explanation, dict):
         st.write(str(explanation.get("fit_summary", "")))
 
-    if st.button("Generate Packet", type="primary", key="builder_generate_packet"):
+    guidance = _recommendation_guidance(score_details)
+    if guidance["tone"] == "success":
+        st.success(guidance["message"])
+    elif guidance["tone"] == "warning":
+        st.warning(guidance["message"])
+    else:
+        st.info(guidance["message"])
+
+    generate_clicked = False
+    if _is_skip_recommendation(score_details):
+        with st.expander("Generate a packet for this Skip role anyway"):
+            st.caption(
+                "Use this only for testing, saving for later, or a deliberate exception."
+            )
+            generate_clicked = st.button(
+                "Generate Packet Anyway",
+                key="builder_generate_packet_anyway",
+            )
+    else:
+        generate_clicked = st.button(
+            "Generate Packet",
+            type="primary",
+            key="builder_generate_packet",
+        )
+
+    if generate_clicked:
         st.session_state["builder_packet"] = generate_application_packet(
             score_details,
             profile.get("resume_text"),
@@ -238,14 +263,46 @@ def _show_builder_analysis(
         return
 
     _show_packet_preview(packet, score_details)
-    if st.button("Save Packet", type="primary", key="builder_save_packet"):
-        save_result = save_application_packet(packet, score_details, applications_dir)
-        st.session_state["builder_saved_packet"] = save_result
+    _show_builder_save_controls(packet, score_details, applications_dir)
 
     saved_packet = st.session_state.get("builder_saved_packet")
     if isinstance(saved_packet, dict):
         st.success(f"Saved packet: {saved_packet['folder_path']}")
         st.caption("Review saved packets below, or open that folder from your file browser.")
+
+
+def _show_builder_save_controls(
+    packet: dict[str, object],
+    score_details: dict[str, object],
+    applications_dir: Path,
+) -> None:
+    existing_packets = list_saved_application_packets(applications_dir)
+    duplicates = _find_duplicate_saved_packets(score_details, existing_packets)
+
+    if duplicates:
+        st.warning(
+            "A packet for this job already exists. Save another version only if "
+            "you intentionally want to keep a new copy."
+        )
+        st.caption(
+            "Existing packet: "
+            + _format_saved_packet_label(duplicates[0])
+        )
+        save_clicked = st.button(
+            "Save as New Version",
+            type="secondary",
+            key="builder_save_duplicate_packet",
+        )
+    else:
+        save_clicked = st.button(
+            "Save Packet",
+            type="primary",
+            key="builder_save_packet",
+        )
+
+    if save_clicked:
+        save_result = save_application_packet(packet, score_details, applications_dir)
+        st.session_state["builder_saved_packet"] = save_result
 
 
 def _show_analysis_details(score_details: dict[str, object]) -> None:
@@ -331,18 +388,30 @@ def _show_saved_packet_review(
 ) -> None:
     st.header("Review Saved Packets")
     st.caption(f"Profile: {profile['display_name']}")
+    st.caption(
+        "Saved packets are local application prep folders. They are not submitted "
+        "anywhere; use them to decide, tailor, and track next actions."
+    )
     saved_packets = list_saved_application_packets(applications_dir, legacy_root=legacy_root)
     if not saved_packets:
         st.info("No saved packets for this profile yet.")
         return
 
     saved_packets = sort_saved_application_packets(saved_packets, "Newest saved first")
-    table_rows = [_saved_packet_table_row(packet) for packet in saved_packets]
+    show_duplicate_versions = st.checkbox(
+        "Show older duplicate versions",
+        key="guided_show_duplicate_versions",
+    )
+    table_packets = _saved_packets_for_queue(
+        saved_packets,
+        include_duplicate_versions=show_duplicate_versions,
+    )
+    table_rows = [_saved_packet_table_row(packet) for packet in table_packets]
     st.dataframe(table_rows, width="stretch", hide_index=True)
 
     packet_options = {
         _format_saved_packet_label(packet): packet
-        for packet in saved_packets
+        for packet in table_packets
     }
     selected_label = st.selectbox(
         "Preview saved packet",
@@ -364,15 +433,20 @@ def _show_saved_packet_review(
 
 
 def _saved_packet_table_row(packet: dict[str, object]) -> dict[str, object]:
+    version_count = int(packet.get("duplicate_version_count", 1) or 1)
+    job_label = str(packet["title"])
+    if version_count > 1:
+        job_label = f"{job_label} ({version_count} versions)"
+
     return {
-        "saved_date": packet["saved_date"],
-        "title": packet["title"],
-        "company": packet["company"],
-        "score": packet["score"],
-        "recommendation": packet["recommendation"],
-        "status": packet["status"],
-        "next_action": packet["next_action"],
-        "next_action_date": packet["next_action_date"],
+        "Saved date": packet["saved_date"],
+        "Job": job_label,
+        "Company": packet["company"],
+        "Score": packet["score"],
+        "Recommendation": packet["recommendation"],
+        "Status": packet["status"],
+        "Next action": packet["next_action"],
+        "Next action date": packet["next_action_date"],
     }
 
 
@@ -1177,6 +1251,121 @@ def _legacy_root_for_profile(profile: dict[str, object]) -> Path | None:
     if profile.get("profile_id") == DEFAULT_PROFILE_ID:
         return APPLICATIONS_DIR
     return None
+
+
+def _recommendation_guidance(score_details: dict[str, object]) -> dict[str, str]:
+    recommendation = str(score_details.get("recommendation", "")).strip().lower()
+    if recommendation == "apply":
+        return {
+            "tone": "success",
+            "message": (
+                "This looks worth turning into a packet. Review the fit details, "
+                "then generate the packet."
+            ),
+        }
+    if recommendation == "skip":
+        return {
+            "tone": "warning",
+            "message": (
+                "This role is probably not worth a full packet unless you are "
+                "intentionally testing or saving it for later."
+            ),
+        }
+    if _is_stretch_role(score_details):
+        return {
+            "tone": "warning",
+            "message": (
+                "Generate a packet only if the candidate has real evidence for "
+                "the major requirements."
+            ),
+        }
+    return {
+        "tone": "info",
+        "message": (
+            "This may be worth applying to, but review the gaps before generating "
+            "a packet."
+        ),
+    }
+
+
+def _is_skip_recommendation(score_details: dict[str, object]) -> bool:
+    return str(score_details.get("recommendation", "")).strip().lower() == "skip"
+
+
+def _is_stretch_role(score_details: dict[str, object]) -> bool:
+    explanation = score_details.get("explanation")
+    if isinstance(explanation, dict):
+        fit_summary = str(explanation.get("fit_summary", "")).lower()
+        if "stretch" in fit_summary:
+            return True
+    return len(_job_requirement_list(score_details, "hard_requirements")) >= 6
+
+
+def _find_duplicate_saved_packets(
+    score_details: dict[str, object],
+    saved_packets: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    target_identity = _packet_identity_from_score(score_details)
+    return [
+        packet
+        for packet in saved_packets
+        if _packet_identity_from_saved_packet(packet) == target_identity
+    ]
+
+
+def _saved_packets_for_queue(
+    saved_packets: list[dict[str, object]],
+    include_duplicate_versions: bool = False,
+) -> list[dict[str, object]]:
+    if include_duplicate_versions:
+        return saved_packets
+
+    latest_by_identity: dict[tuple[str, str], dict[str, object]] = {}
+    version_counts: Counter[tuple[str, str]] = Counter()
+    for packet in saved_packets:
+        identity = _packet_identity_from_saved_packet(packet)
+        version_counts[identity] += 1
+        if identity not in latest_by_identity:
+            latest_by_identity[identity] = dict(packet)
+
+    latest_packets = []
+    for identity, packet in latest_by_identity.items():
+        packet["duplicate_version_count"] = version_counts[identity]
+        latest_packets.append(packet)
+    return latest_packets
+
+
+def _packet_identity_from_score(score_details: dict[str, object]) -> tuple[str, str]:
+    metadata = score_details.get("job_metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+    return (
+        _normalize_packet_identity_value(metadata.get("company")),
+        _normalize_packet_identity_value(_clean_packet_title(metadata.get("title"))),
+    )
+
+
+def _packet_identity_from_saved_packet(packet: dict[str, object]) -> tuple[str, str]:
+    return (
+        _normalize_packet_identity_value(packet.get("company")),
+        _normalize_packet_identity_value(_clean_packet_title(packet.get("title"))),
+    )
+
+
+def _clean_packet_title(value: object) -> str:
+    if not isinstance(value, str):
+        return ""
+    title = value.strip()
+    for separator in [" Who ", " who ", " With ", " with "]:
+        if separator in title:
+            return title.split(separator, 1)[0].strip()
+    return title
+
+
+def _normalize_packet_identity_value(value: object) -> str:
+    text = str(value or "").strip().lower()
+    normalized = "".join(character if character.isalnum() else " " for character in text)
+    return " ".join(normalized.split())
 
 
 def _format_list(value: object) -> str:
