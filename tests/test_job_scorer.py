@@ -1,4 +1,27 @@
-from job_scorer import NEGATIVE_KEYWORDS, POSITIVE_KEYWORDS, score_job
+from job_scorer import (
+    NEGATIVE_KEYWORDS,
+    POSITIVE_KEYWORDS,
+    extract_job_requirements,
+    score_job,
+)
+
+
+FEI_JOB_TEXT = """
+FEI Systems builds technology solutions for health and human services.
+We are looking for a Full-Stack Developer to work on case management software.
+
+Required Skills/Experience
+- 4+ years C#/.NET software development experience
+- 3+ years Angular 16+ and TypeScript development
+- SQL Server or relational database experience
+- Git, Azure DevOps, and CI/CD pipelines
+- 1+ years AWS serverless or similar cloud services
+- Object-oriented design patterns
+- Domain Driven Design
+- Service Oriented Architecture
+- Unit testing
+- Test Driven Development
+"""
 
 
 def test_score_job_clamps_to_100() -> None:
@@ -125,3 +148,38 @@ def test_score_job_explanation_does_not_include_full_raw_text() -> None:
 
     assert raw_text not in explanation_text
     assert "private details" not in explanation_text
+
+
+def test_extract_job_requirements_detects_fei_full_stack_requirements() -> None:
+    requirements = extract_job_requirements(FEI_JOB_TEXT)
+
+    hard_requirements = requirements["hard_requirements"]
+    assert "C# / .NET 5+" in hard_requirements
+    assert "Angular 16+" in hard_requirements
+    assert "TypeScript" in hard_requirements
+    assert "SQL Server / relational database" in hard_requirements
+    assert "Git / Azure DevOps / CI/CD" in hard_requirements
+    assert "AWS serverless" in hard_requirements
+    assert "Object-oriented design patterns" in hard_requirements
+    assert "Domain Driven Design" in hard_requirements
+    assert "Service Oriented Architecture" in hard_requirements
+    assert "Unit testing" in hard_requirements
+    assert "Test Driven Development" in hard_requirements
+    assert any("4+ years" in item for item in requirements["experience_requirements"])
+
+
+def test_score_explanation_marks_many_hard_requirements_as_stretch() -> None:
+    job = {
+        "title": "Full-Stack Developer",
+        "company": "FEI Systems",
+        "location": "Remote",
+        "work_mode": "Remote",
+        "raw_text": FEI_JOB_TEXT,
+    }
+
+    score_details = score_job(job)
+    explanation = score_details["explanation"]
+
+    assert "stretch role" in explanation["fit_summary"]
+    assert any("C# / .NET" in item for item in explanation["gaps"])
+    assert any("Experience requirements to verify" in item for item in explanation["gaps"])

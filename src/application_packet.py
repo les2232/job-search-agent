@@ -33,13 +33,30 @@ def generate_application_packet(
     explanation = score_result.get("explanation")
     explanation_concerns = _explanation_list(explanation, "concerns")
     source_text = _source_text(score_result)
+    job_requirements = _job_requirements(score_result)
 
     profile_themes = _find_profile_themes(profile_text)
     role_label = _role_label(metadata)
     cover_role_label = _cover_role_label(role_label)
     company_label = _company_label(metadata)
     strongest_matches = _strongest_matches(matched_keywords, profile_themes)
-    gaps_to_review = _gaps_to_review(missing_keywords, concerns)
+    supported_overlap = _supported_overlap(
+        matched_keywords,
+        profile_themes,
+        job_requirements,
+        profile_text,
+    )
+    requirements_to_verify = _requirements_to_verify(
+        job_requirements,
+        matched_keywords,
+        profile_text,
+    )
+    gaps_to_review = _gaps_to_review(
+        missing_keywords,
+        concerns,
+        requirements_to_verify,
+    )
+    stretch_warning = _build_stretch_warning(requirements_to_verify)
 
     return {
         "positioning_summary": _build_positioning_summary(
@@ -48,6 +65,7 @@ def generate_application_packet(
             role_label,
             company_label,
             strongest_matches,
+            stretch_warning,
         ),
         "apply_recommendation": _build_apply_recommendation(
             recommendation,
@@ -57,6 +75,9 @@ def generate_application_packet(
             strongest_matches,
             gaps_to_review,
             profile_themes,
+            supported_overlap,
+            requirements_to_verify,
+            stretch_warning,
         ),
         "resume_bullet_suggestions": _build_resume_bullet_suggestions(
             strongest_matches,
@@ -83,6 +104,8 @@ def generate_application_packet(
             metadata,
             gaps_to_review,
             explanation_concerns,
+            requirements_to_verify,
+            stretch_warning,
         ),
     }
 
@@ -136,6 +159,13 @@ def _source_text(score_result: dict[str, object]) -> str:
     return ""
 
 
+def _job_requirements(score_result: dict[str, object]) -> dict[str, object]:
+    value = score_result.get("job_requirements")
+    if not isinstance(value, dict):
+        return {}
+    return value
+
+
 def _explanation_list(explanation: object, key: str) -> list[str]:
     if not isinstance(explanation, dict):
         return []
@@ -168,7 +198,11 @@ def _strongest_matches(
 def _gaps_to_review(
     missing_keywords: list[str],
     concerns: list[str],
+    requirements_to_verify: list[str],
 ) -> list[str]:
+    if requirements_to_verify:
+        return requirements_to_verify
+
     gaps = []
     for value in missing_keywords + concerns:
         if value not in gaps:
@@ -182,7 +216,13 @@ def _build_positioning_summary(
     role_label: str,
     company_label: str,
     strongest_matches: list[str],
+    stretch_warning: str,
 ) -> str:
+    if stretch_warning:
+        return (
+            f"{role_label} at {company_label} should be treated as a stretch "
+            f"role. {stretch_warning}"
+        )
     match_text = _format_inline_list(strongest_matches[:4], "the configured fit areas")
     if recommendation == "Apply":
         return (
@@ -225,8 +265,25 @@ def _build_resume_focus_areas(
     strongest_matches: list[str],
     gaps_to_review: list[str],
     profile_themes: list[str],
+    supported_overlap: list[str],
+    requirements_to_verify: list[str],
+    stretch_warning: str,
 ) -> list[str]:
     focus_areas = []
+    if supported_overlap:
+        focus_areas.append(
+            "Strong / supported overlap: "
+            + _format_inline_list(supported_overlap[:8], "supported overlap")
+            + "."
+        )
+    if requirements_to_verify:
+        focus_areas.append(
+            "Major requirements to verify: "
+            + _format_inline_list(requirements_to_verify[:10], "role requirements")
+            + "."
+        )
+    if stretch_warning:
+        focus_areas.append("Stretch warning: " + stretch_warning)
     if strongest_matches:
         focus_areas.append(
             "Lead with verified experience related to: "
@@ -464,6 +521,8 @@ def _build_risk_notes(
     metadata: dict[str, str],
     gaps_to_review: list[str],
     explanation_concerns: list[str],
+    requirements_to_verify: list[str],
+    stretch_warning: str,
 ) -> list[str]:
     risk_notes = [REVIEW_WARNING]
     unknown_fields = [
@@ -475,18 +534,137 @@ def _build_risk_notes(
         risk_notes.append(
             "Confirm job metadata before applying: " + ", ".join(unknown_fields) + "."
         )
-    if gaps_to_review:
+    if requirements_to_verify:
+        risk_notes.append(
+            "Major role requirements to verify before applying: "
+            + _format_inline_list(requirements_to_verify[:12], "role requirements")
+            + "."
+        )
+    elif gaps_to_review:
         risk_notes.append(
             "Only include these areas if you can support them: "
             + _format_inline_list(gaps_to_review[:6], "potential gaps")
             + "."
         )
+    if stretch_warning:
+        risk_notes.append(stretch_warning)
     for concern in explanation_concerns:
         if "No concern" not in concern and concern not in risk_notes:
             risk_notes.append(concern)
     if len(risk_notes) == 1:
         risk_notes.append("No major packet risks were detected from the score data.")
     return risk_notes
+
+
+def _supported_overlap(
+    matched_keywords: list[str],
+    profile_themes: list[str],
+    job_requirements: dict[str, object],
+    profile_text: str | None,
+) -> list[str]:
+    overlap = []
+    hard_requirements = _requirement_values(job_requirements, "hard_requirements")
+    if any(keyword.lower() in {"git", "github"} for keyword in matched_keywords):
+        overlap.append("Git/version control")
+    if any(keyword.lower() in {"sql", "database", "data"} for keyword in matched_keywords):
+        overlap.append("SQL/database work")
+    if any(keyword.lower() == "remote" for keyword in matched_keywords):
+        overlap.append("remote collaboration")
+    for theme, label in [
+        ("frontline IT support", "communication and user support"),
+        ("documentation", "documentation"),
+        ("classroom/AV troubleshooting", "troubleshooting"),
+        ("ticket workflows", "follow-through in support workflows"),
+    ]:
+        if theme in profile_themes:
+            overlap.append(label)
+    if _profile_supports(profile_text, ["sql server", "relational database"]):
+        overlap.append("SQL Server / relational database")
+    return _dedupe([item for item in overlap if _is_overlap_relevant(item, hard_requirements)])
+
+
+def _requirements_to_verify(
+    job_requirements: dict[str, object],
+    matched_keywords: list[str],
+    profile_text: str | None,
+) -> list[str]:
+    requirements = []
+    for requirement in _requirement_values(job_requirements, "hard_requirements"):
+        if not _requirement_supported(requirement, matched_keywords, profile_text):
+            requirements.append(requirement)
+    requirements.extend(_requirement_values(job_requirements, "experience_requirements"))
+    return _dedupe(requirements)
+
+
+def _requirement_supported(
+    requirement: str,
+    matched_keywords: list[str],
+    profile_text: str | None,
+) -> bool:
+    normalized_matches = {keyword.lower() for keyword in matched_keywords}
+    support_markers = {
+        "SQL Server / relational database": ["sql", "database", "relational database"],
+        "Git / Azure DevOps / CI/CD": ["git", "azure devops", "ci/cd"],
+    }
+    markers = support_markers.get(requirement, [requirement.lower()])
+    if any(marker in normalized_matches for marker in markers):
+        return True
+    return _profile_supports(profile_text, markers)
+
+
+def _profile_supports(profile_text: str | None, markers: list[str]) -> bool:
+    if not profile_text:
+        return False
+    normalized = profile_text.lower()
+    return any(marker.lower() in normalized for marker in markers)
+
+
+def _is_overlap_relevant(value: str, hard_requirements: list[str]) -> bool:
+    if value in {"communication and user support", "documentation", "troubleshooting", "follow-through in support workflows", "remote collaboration"}:
+        return True
+    if value == "Git/version control":
+        return "Git / Azure DevOps / CI/CD" in hard_requirements
+    if value in {"SQL/database work", "SQL Server / relational database"}:
+        return "SQL Server / relational database" in hard_requirements
+    return True
+
+
+def _build_stretch_warning(requirements_to_verify: list[str]) -> str:
+    hard_gap_text = " ".join(requirements_to_verify).lower()
+    stack_gaps = [
+        label
+        for label, markers in [
+            ("C#/.NET", ["c# / .net", ".net"]),
+            ("Angular/TypeScript", ["angular", "typescript"]),
+            ("cloud/serverless", ["aws", "serverless"]),
+            ("testing", ["unit testing", "test driven"]),
+            ("architecture", ["domain driven", "service oriented", "object-oriented"]),
+        ]
+        if any(marker in hard_gap_text for marker in markers)
+    ]
+    if len(stack_gaps) < 3:
+        return ""
+    return (
+        "This appears to be a stretch full-stack developer role unless the candidate "
+        "has direct evidence for the required "
+        + _format_inline_list(stack_gaps, "hard-skill")
+        + " experience."
+    )
+
+
+def _requirement_values(job_requirements: dict[str, object], key: str) -> list[str]:
+    values = job_requirements.get(key)
+    if not isinstance(values, list):
+        return []
+    return [str(value) for value in values if str(value).strip()]
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    deduped = []
+    for value in values:
+        if value not in deduped:
+            deduped.append(value)
+    return deduped
 
 
 def _format_inline_list(values: list[str], fallback: str) -> str:

@@ -196,6 +196,12 @@ Scoring rules live in `config.example.json`. You can create an ignored
 - concerns
 - tailoring suggestions
 
+The packet also extracts common hard requirements from the posting, such as
+languages/frameworks, databases, cloud/devops tools, testing practices,
+architecture terms, and years-of-experience requirements. These extracted role
+requirements are used for risk notes and resume tailoring guidance, so generic
+target keywords are not treated as gaps unless the job actually asks for them.
+
 ## Application Packets
 
 The `--packet` flow creates deterministic, reviewable guidance from the score
