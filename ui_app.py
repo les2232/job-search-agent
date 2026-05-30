@@ -47,8 +47,12 @@ STATUS_OPTIONS = ["New", "Applied", "Interview", "Rejected", "Saved", "Archived"
 
 
 def main() -> None:
-    st.set_page_config(page_title="Job Search Agent", layout="wide")
-    st.title("Job Search Agent")
+    st.set_page_config(page_title="Application Packet Builder", layout="wide")
+    st.title("Application Packet Builder")
+    st.write(
+        "Paste a job posting, review the fit, generate a local application packet, "
+        "and save it under the selected profile."
+    )
 
     selected_profile = _show_profile_selector()
     selected_applications_dir = profile_applications_dir(
@@ -57,35 +61,319 @@ def main() -> None:
     )
     legacy_root = _legacy_root_for_profile(selected_profile)
 
+    _show_guided_packet_builder(selected_profile, selected_applications_dir)
+    st.divider()
+    _show_saved_packet_review(selected_profile, selected_applications_dir, legacy_root)
+    st.divider()
+
     tracked_jobs = read_tracked_jobs(JOBS_CSV_PATH)
-    dashboard_tab, today_tab, score_tab, tracker_tab, packets_tab, saved_tab = st.tabs(
-        [
-            "Dashboard",
-            "Today",
-            "Score a Job",
-            "Tracker",
-            "Application Packets",
-            "Saved applications",
-        ]
+    with st.expander("Advanced tools: dashboard, tracker, and legacy packet generator"):
+        dashboard_tab, today_tab, score_tab, tracker_tab, packets_tab, saved_tab = st.tabs(
+            [
+                "Dashboard",
+                "Today",
+                "Score a Job",
+                "Tracker",
+                "Application Packets",
+                "Saved applications",
+            ]
+        )
+
+        with dashboard_tab:
+            _show_dashboard(
+                tracked_jobs,
+                selected_profile,
+                selected_applications_dir,
+                legacy_root,
+            )
+
+        with today_tab:
+            _show_today_tab(selected_profile, selected_applications_dir, legacy_root)
+
+        with score_tab:
+            _show_score_job_tab(selected_profile, selected_applications_dir)
+
+        with tracker_tab:
+            _show_tracker_tab(tracked_jobs)
+
+        with packets_tab:
+            _show_application_packets_tab(selected_profile)
+
+        with saved_tab:
+            _show_saved_applications_tab(
+                selected_profile,
+                selected_applications_dir,
+                legacy_root,
+            )
+
+
+def _show_guided_packet_builder(
+    profile: dict[str, object],
+    applications_dir: Path,
+) -> None:
+    st.header("Start New Packet")
+    st.caption("Main flow: Paste -> Analyze -> Generate -> Save")
+
+    field_cols = st.columns(5)
+    title = field_cols[0].text_input("Job Title", key="builder_title")
+    company = field_cols[1].text_input("Company", key="builder_company")
+    location = field_cols[2].text_input("Location", key="builder_location")
+    work_mode = field_cols[3].selectbox(
+        "Work Mode",
+        ["", "Remote", "Hybrid", "On-site", "Unknown"],
+        key="builder_work_mode",
+    )
+    job_type = field_cols[4].text_input("Job Type", key="builder_job_type")
+
+    job_text = st.text_area(
+        "Paste job posting here",
+        height=320,
+        key="builder_job_text",
+        placeholder=(
+            "Paste the full copied posting here. Indeed/job-board headers are okay; "
+            "use the optional fields above when the copied text starts with boilerplate."
+        ),
+    )
+    st.caption(
+        "Optional fields are prepended as clean labels before analysis so the parser "
+        "can prioritize them over copied job-board boilerplate."
     )
 
-    with dashboard_tab:
-        _show_dashboard(tracked_jobs, selected_profile, selected_applications_dir, legacy_root)
+    if st.button("Analyze Job", type="primary", key="builder_analyze"):
+        full_job_text = _build_guided_job_text(
+            job_text,
+            title=title,
+            company=company,
+            location=location,
+            work_mode=work_mode,
+            job_type=job_type,
+        )
+        if not full_job_text.strip():
+            st.error("Paste a job posting before analyzing.")
+        else:
+            job = parse_job_text(
+                full_job_text,
+                title=title,
+                company=company,
+                location=location,
+            )
+            score_details = score_job(job)
+            st.session_state["builder_job"] = job
+            st.session_state["builder_score_details"] = score_details
+            st.session_state["builder_job_text"] = full_job_text
+            st.session_state.pop("builder_packet", None)
+            st.session_state.pop("builder_saved_packet", None)
 
-    with today_tab:
-        _show_today_tab(selected_profile, selected_applications_dir, legacy_root)
+    job = st.session_state.get("builder_job")
+    score_details = st.session_state.get("builder_score_details")
+    if isinstance(job, dict) and isinstance(score_details, dict):
+        _show_builder_analysis(job, score_details, profile, applications_dir)
+    else:
+        st.info("Paste a posting and click Analyze Job to start.")
 
-    with score_tab:
-        _show_score_job_tab(selected_profile, selected_applications_dir)
 
-    with tracker_tab:
-        _show_tracker_tab(tracked_jobs)
+def _build_guided_job_text(
+    job_text: str,
+    title: str = "",
+    company: str = "",
+    location: str = "",
+    work_mode: str = "",
+    job_type: str = "",
+) -> str:
+    header_lines = []
+    for label, value in [
+        ("Job Title", title),
+        ("Company", company),
+        ("Location", location),
+        ("Work Mode", work_mode),
+        ("Job Type", job_type),
+    ]:
+        clean_value = value.strip()
+        if clean_value and clean_value.lower() != "unknown":
+            header_lines.append(f"{label}: {clean_value}")
 
-    with packets_tab:
-        _show_application_packets_tab(selected_profile)
+    body = job_text.strip()
+    if not header_lines:
+        return body
+    if body:
+        return "\n".join(header_lines + ["", "Full Job Description:", body])
+    return "\n".join(header_lines)
 
-    with saved_tab:
-        _show_saved_applications_tab(selected_profile, selected_applications_dir, legacy_root)
+
+def _show_builder_analysis(
+    job: dict[str, object],
+    score_details: dict[str, object],
+    profile: dict[str, object],
+    applications_dir: Path,
+) -> None:
+    st.subheader("Analysis")
+    meta_cols = st.columns(4)
+    meta_cols[0].metric("Title", str(job.get("title", "Unknown")))
+    meta_cols[1].metric("Company", str(job.get("company", "Unknown")))
+    meta_cols[2].metric("Location", str(job.get("location", "Unknown")))
+    meta_cols[3].metric("Work mode", str(job.get("work_mode", "Unknown")))
+
+    score_cols = st.columns(3)
+    score_cols[0].metric("Score", f"{score_details.get('score', 'Unknown')}/100")
+    score_cols[1].metric("Recommendation", str(score_details.get("recommendation", "Unknown")))
+    score_cols[2].metric(
+        "Hard requirements",
+        str(len(_job_requirement_list(score_details, "hard_requirements"))),
+    )
+
+    explanation = score_details.get("explanation")
+    if isinstance(explanation, dict):
+        st.write(str(explanation.get("fit_summary", "")))
+
+    if st.button("Generate Packet", type="primary", key="builder_generate_packet"):
+        st.session_state["builder_packet"] = generate_application_packet(
+            score_details,
+            profile.get("resume_text"),
+        )
+        st.session_state.pop("builder_saved_packet", None)
+
+    packet = st.session_state.get("builder_packet")
+    if not isinstance(packet, dict):
+        _show_analysis_details(score_details)
+        return
+
+    _show_packet_preview(packet, score_details)
+    if st.button("Save Packet", type="primary", key="builder_save_packet"):
+        save_result = save_application_packet(packet, score_details, applications_dir)
+        st.session_state["builder_saved_packet"] = save_result
+
+    saved_packet = st.session_state.get("builder_saved_packet")
+    if isinstance(saved_packet, dict):
+        st.success(f"Saved packet: {saved_packet['folder_path']}")
+        st.caption("Review saved packets below, or open that folder from your file browser.")
+
+
+def _show_analysis_details(score_details: dict[str, object]) -> None:
+    st.subheader("Fit Details")
+    detail_cols = st.columns(2)
+    with detail_cols[0]:
+        _show_inline_list("Matched / supported overlap", score_details.get("matched_keywords"))
+        _show_inline_list(
+            "Hard requirements detected",
+            _job_requirement_list(score_details, "hard_requirements"),
+        )
+    with detail_cols[1]:
+        _show_inline_list(
+            "Experience requirements",
+            _job_requirement_list(score_details, "experience_requirements"),
+        )
+        _show_inline_list("Concerns", score_details.get("concerns"))
+
+
+def _show_packet_preview(
+    packet: dict[str, object],
+    score_details: dict[str, object],
+) -> None:
+    strategy = packet.get("resume_strategy_sections")
+    fit_verdict = ""
+    if isinstance(strategy, dict):
+        fit_verdict = str(strategy.get("fit_verdict") or "")
+    if fit_verdict:
+        st.success(f"Fit Verdict: {fit_verdict}")
+    st.info(str(packet.get("apply_recommendation", "")))
+
+    preview_tabs = st.tabs(
+        [
+            "Resume Strategy",
+            "Cover Letter",
+            "Checklist",
+            "Score Explanation",
+            "Risk Notes",
+        ]
+    )
+    with preview_tabs[0]:
+        _show_resume_strategy(packet)
+    with preview_tabs[1]:
+        st.text(str(packet.get("cover_letter_draft", "")))
+    with preview_tabs[2]:
+        _show_plain_list(packet.get("application_checklist"))
+    with preview_tabs[3]:
+        _show_score_explanation(score_details.get("explanation"))
+    with preview_tabs[4]:
+        _show_plain_list(packet.get("risk_notes"))
+
+
+def _show_resume_strategy(packet: dict[str, object]) -> None:
+    strategy = packet.get("resume_strategy_sections")
+    if isinstance(strategy, dict):
+        st.subheader(str(strategy.get("fit_verdict", "Review Fit")))
+        st.write(str(strategy.get("fit_summary", "")))
+        st.markdown("**Strong / Supported Overlap**")
+        _show_plain_list(strategy.get("supported_overlap"))
+        st.markdown("**Major Requirements To Verify Before Applying**")
+        _show_plain_list(strategy.get("major_requirements_to_verify"))
+        st.markdown("**Apply Only If**")
+        _show_plain_list(strategy.get("apply_only_if"))
+        st.markdown("**Consider Skipping Or Deprioritizing If**")
+        _show_plain_list(strategy.get("consider_skipping_if"))
+        st.markdown("**Transferable Support Evidence**")
+        _show_plain_list(strategy.get("transferable_support_evidence"))
+    else:
+        _show_plain_list(packet.get("resume_focus_areas"))
+
+    st.markdown("**Suggested Resume Bullets**")
+    _show_plain_list(packet.get("resume_bullet_suggestions"))
+    st.markdown("**Keywords / Themes To Include Honestly**")
+    _show_plain_list(packet.get("keywords_to_include_honestly"))
+    st.markdown("**Keywords To Verify Or Avoid**")
+    _show_plain_list(packet.get("keywords_to_avoid_or_verify"))
+
+
+def _show_saved_packet_review(
+    profile: dict[str, object],
+    applications_dir: Path,
+    legacy_root: Path | None,
+) -> None:
+    st.header("Review Saved Packets")
+    st.caption(f"Profile: {profile['display_name']}")
+    saved_packets = list_saved_application_packets(applications_dir, legacy_root=legacy_root)
+    if not saved_packets:
+        st.info("No saved packets for this profile yet.")
+        return
+
+    saved_packets = sort_saved_application_packets(saved_packets, "Newest saved first")
+    table_rows = [_saved_packet_table_row(packet) for packet in saved_packets]
+    st.dataframe(table_rows, use_container_width=True, hide_index=True)
+
+    packet_options = {
+        _format_saved_packet_label(packet): packet
+        for packet in saved_packets
+    }
+    selected_label = st.selectbox(
+        "Preview saved packet",
+        list(packet_options),
+        key="guided_saved_packet_preview",
+    )
+    selected_packet = packet_options[selected_label]
+    packet_details = load_saved_application_packet(selected_packet["folder_path"])
+    if packet_details is None:
+        st.warning("This saved packet could not be loaded.")
+        return
+
+    st.caption(f"Saved folder: {packet_details['folder_path']}")
+    _show_saved_packet_status_controls(packet_details)
+    _show_packet_preview(
+        packet_details["application_packet"],
+        packet_details["score_summary"],
+    )
+
+
+def _saved_packet_table_row(packet: dict[str, object]) -> dict[str, object]:
+    return {
+        "saved_date": packet["saved_date"],
+        "title": packet["title"],
+        "company": packet["company"],
+        "score": packet["score"],
+        "recommendation": packet["recommendation"],
+        "status": packet["status"],
+        "next_action": packet["next_action"],
+        "next_action_date": packet["next_action_date"],
+    }
 
 
 def _show_dashboard(
@@ -620,16 +908,17 @@ def _show_score_summary(
 
 def _show_score_explanation(explanation: object) -> None:
     if not isinstance(explanation, dict):
+        st.caption("No score explanation was saved for this packet.")
         return
 
     st.subheader("Why this score?")
-    st.write(explanation["fit_summary"])
-    _show_explanation_list("Strengths", explanation["strengths"])
-    _show_explanation_list("Gaps", explanation["gaps"])
-    _show_explanation_list("Concerns", explanation["concerns"])
+    st.write(str(explanation.get("fit_summary", "")))
+    _show_explanation_list("Strengths", explanation.get("strengths"))
+    _show_explanation_list("Gaps", explanation.get("gaps"))
+    _show_explanation_list("Concerns", explanation.get("concerns"))
     _show_explanation_list(
         "Tailoring suggestions",
-        explanation["tailoring_suggestions"],
+        explanation.get("tailoring_suggestions"),
     )
 
 
@@ -696,6 +985,19 @@ def _show_packet_list(label: str, values: object, expanded: bool = False) -> Non
             return
         for value in values:
             st.write(f"- {value}")
+
+
+def _show_inline_list(label: str, values: object) -> None:
+    st.markdown(f"**{label}**")
+    _show_plain_list(values)
+
+
+def _show_plain_list(values: object) -> None:
+    if not isinstance(values, list) or not values:
+        st.caption("None.")
+        return
+    for value in values:
+        st.write(f"- {value}")
 
 
 def _show_explanation_list(label: str, values: object) -> None:
@@ -818,6 +1120,16 @@ def _format_list(value: object) -> str:
     if isinstance(value, list) and value:
         return ", ".join(str(item) for item in value)
     return "None"
+
+
+def _job_requirement_list(score_details: dict[str, object], key: str) -> list[str]:
+    requirements = score_details.get("job_requirements")
+    if not isinstance(requirements, dict):
+        return []
+    values = requirements.get(key)
+    if not isinstance(values, list):
+        return []
+    return [str(value) for value in values if str(value).strip()]
 
 
 if __name__ == "__main__":
