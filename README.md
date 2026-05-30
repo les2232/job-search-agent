@@ -264,6 +264,12 @@ must be checked manually before use. The app does not invent resume claims, and
 you should remove unsupported skills, avoid fake metrics, and keep professional
 experience separate from coursework or project exposure.
 
+Evidence suggestions are intentionally conservative. Auto-suggested evidence is
+not verified proof, especially for AI agents, LLM workflows, cloud/deployment,
+and production engineering claims. Treat the generated resume bullets as
+reviewable candidates, replace generic wording with real examples, and remove
+anything you cannot support before applying.
+
 Saved packets go under:
 
 ```text

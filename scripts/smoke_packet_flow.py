@@ -158,7 +158,7 @@ def _assert_fei(
     _require("Apply Only If" in notes, "FEI packet missing apply guidance.")
     _require("Consider Skipping Or Deprioritizing If" in notes, "FEI packet missing skip guidance.")
     _require("Tailored Resume Draft" in tailored_resume, "FEI tailored_resume.md was not written.")
-    _require("Missing Proof To Resolve" in tailored_resume, "FEI tailored resume missing proof guidance.")
+    _require("Missing Proof Next Actions" in tailored_resume, "FEI tailored resume missing proof guidance.")
     _require("Connected C# / .NET" not in tailored_resume, "FEI tailored resume falsely claimed .NET evidence.")
     _require("Connected Angular" not in tailored_resume, "FEI tailored resume falsely claimed Angular evidence.")
     _require("raw_text" not in packet_text, "FEI packet JSON included raw_text.")

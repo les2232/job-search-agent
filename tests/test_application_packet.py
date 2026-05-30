@@ -471,6 +471,7 @@ def test_ai_agent_cover_letter_mentions_automation_without_false_ai_claims() -> 
     assert "production ai agent" not in cover_letter_lower
     assert "llm framework expertise" not in cover_letter_lower
     assert "professional ai engineering experience" not in cover_letter_lower
+    assert "Arrivia, Inc.." not in cover_letter
     assert ".net" not in cover_letter_lower
     assert "angular" not in cover_letter_lower
 
@@ -538,7 +539,7 @@ def test_tailored_resume_does_not_claim_unsupported_fei_requirements() -> None:
     assert "pytest tests in Python projects" in tailored_resume
 
 
-def test_tailored_resume_treats_auto_suggested_evidence_as_reviewable() -> None:
+def test_tailored_resume_separates_resume_draft_from_internal_review_notes() -> None:
     packet = generate_application_packet(
         _arrivia_score_result(),
         (
@@ -560,11 +561,30 @@ def test_tailored_resume_treats_auto_suggested_evidence_as_reviewable() -> None:
                     "Confirm concrete examples."
                 ),
             },
+            "Prompt engineering": {
+                "status": "Some evidence",
+                "notes": (
+                    "Auto-suggested from profile: Profile mentions prompt engineering. "
+                    "Avoid overstating production experience."
+                ),
+            },
         },
     )
     tailored_resume = packet["tailored_resume_draft"]
+    resume_section = tailored_resume.split("## Internal Review Notes", 1)[0]
+    internal_section = tailored_resume.split("## Internal Review Notes", 1)[1]
 
-    assert "Review and, if true, connect Python scripting/development to evidence" in tailored_resume
-    assert "Auto-suggested from profile" in tailored_resume
+    assert "## Resume Summary Draft" in tailored_resume
+    assert "## Resume Bullet Candidates" in tailored_resume
+    assert "## Internal Review Notes" in tailored_resume
+    assert "### Needs Verification" in tailored_resume
+    assert "### Skills To Avoid Unless Proven" in tailored_resume
+    assert "### Missing Proof Next Actions" in tailored_resume
+    assert "Auto-suggested from profile" not in tailored_resume
+    assert "profile appears to mention" not in tailored_resume
+    assert "Verify the exact claim before using" not in tailored_resume
+    assert "Review and, if true, connect" not in tailored_resume
     assert "Connected Python scripting/development to verified evidence" not in tailored_resume
+    assert "Used AI-assisted tooling or prompt-driven workflows" in resume_section
+    assert "API integration experience: partial evidence" in internal_section
     assert "Confirm every claim is true." in tailored_resume

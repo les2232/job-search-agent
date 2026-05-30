@@ -216,10 +216,32 @@ def test_evidence_suggestion_helper_keeps_ai_agent_exposure_cautious() -> None:
         PROFILE_TEXT,
         "LLM / large language model workflow experience",
     )
+    agent_suggestion = _suggest_evidence_for_requirement(
+        PROFILE_TEXT,
+        "Agent-building tools or LLM platform experience",
+    )
+    prompt_suggestion = _suggest_evidence_for_requirement(
+        PROFILE_TEXT,
+        "Prompt engineering or prompting experience",
+    )
 
     assert suggestion["status"] == "Some evidence"
-    assert "production agent experience" in suggestion["notes"]
+    assert "project exposure" in suggestion["notes"]
     assert suggestion["status"] != "Strong evidence"
+    assert agent_suggestion["status"] == "Some evidence"
+    assert prompt_suggestion["status"] == "Some evidence"
+
+
+def test_evidence_suggestion_helper_requires_explicit_production_ai_for_strong() -> None:
+    profile_text = PROFILE_TEXT + "\nOwned production LLM/agent system used by real users."
+
+    suggestion = _suggest_evidence_for_requirement(
+        profile_text,
+        "AI agent or automation workflow experience",
+    )
+
+    assert suggestion["status"] == "Strong evidence"
+    assert "production/deployed" in suggestion["notes"]
 
 
 def test_evidence_suggestion_helper_respects_use_carefully_skills() -> None:

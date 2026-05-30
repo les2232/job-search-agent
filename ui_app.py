@@ -457,6 +457,15 @@ def _suggest_evidence_for_requirement(
             "Profile mentions SQL/SQLite, dashboards, logs, reports, or data-backed troubleshooting. Confirm exact examples.",
         )
     if "prompt" in normalized_requirement:
+        if _has_strong_ai_evidence(normalized_profile):
+            return {
+                "status": "Strong evidence",
+                "notes": (
+                    "Auto-suggested from profile: explicit production/deployed/"
+                    "professional AI or LLM system evidence appears in the profile. "
+                    "Confirm the exact example before using."
+                ),
+            }
         return _suggest_from_markers(
             normalized_profile,
             ["prompt engineering", "openai api", "codex", "ai-assisted", "structured prompting"],
@@ -471,12 +480,13 @@ def _suggest_evidence_for_requirement(
         or "agentic" in normalized_requirement
         or "agent-building" in normalized_requirement
     ):
-        if "production agent" in normalized_profile or "production ai engineering" in normalized_profile:
+        if _has_strong_ai_evidence(normalized_profile):
             return {
                 "status": "Strong evidence",
                 "notes": (
-                    "Auto-suggested from profile: profile appears to mention "
-                    "production AI/agent experience. Verify the exact claim before using."
+                    "Auto-suggested from profile: explicit production/deployed/"
+                    "professional AI or LLM system evidence appears in the profile. "
+                    "Confirm the exact example before using."
                 ),
             }
         return _suggest_from_markers(
@@ -529,6 +539,24 @@ def _suggest_from_markers(
         "status": unmatched_status,
         "notes": "Review manually; profile text did not clearly prove this requirement.",
     }
+
+
+def _has_strong_ai_evidence(normalized_profile: str) -> bool:
+    return any(
+        marker in normalized_profile
+        for marker in [
+            "production ai agent",
+            "deployed ai agent",
+            "professional ai engineering",
+            "enterprise llm workflow",
+            "owned production llm",
+            "owned production agent",
+            "production llm/agent system",
+            "deployed agentic system",
+            "real users using the ai agent",
+            "customers using the ai agent",
+        ]
+    )
 
 
 def _profile_marks_use_carefully(

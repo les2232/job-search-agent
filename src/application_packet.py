@@ -736,10 +736,10 @@ def _build_cover_letter_draft(
         [
             "Dear Hiring Team,",
             "",
-            (
-                f"I am interested in the {role_label} role at {company_label}."
-                f" {company_reason}"
-            ),
+            _sentence(
+                f"I am interested in the {role_label} role at {company_label}"
+            )
+            + f" {company_reason}",
             "",
             (
                 f"My background includes {profile_strengths}. In those settings, "
@@ -758,7 +758,7 @@ def _build_cover_letter_draft(
             (
                 "Thank you for your time and consideration. I would welcome the "
                 f"opportunity to discuss how my technical background and interest "
-                f"in this work could support {company_label}."
+                f"in this work could support {_trim_sentence_period(company_label)}."
             ),
         ]
     )
@@ -781,7 +781,7 @@ def _build_tailored_resume_draft(
         item["requirement"]
         for item in evidence_summary["missing_proof"] + evidence_summary["needs_verification"]
     ]
-    summary_lines = _tailored_summary_lines(
+    summary = _tailored_summary_draft(
         role_label,
         supported_requirements,
         profile_text,
@@ -790,7 +790,12 @@ def _build_tailored_resume_draft(
         supported_requirements,
         resume_strategy_sections,
     )
-    bullets = _tailored_resume_bullets(supported_items, profile_text)
+    bullets = _tailored_resume_bullet_candidates(supported_requirements, profile_text)
+    needs_verification = _tailored_needs_verification(evidence_summary)
+    skills_to_avoid = _tailored_skills_to_avoid(
+        evidence_summary,
+        missing_requirements,
+    )
 
     return "\n".join(
         [
@@ -808,30 +813,37 @@ def _build_tailored_resume_draft(
             "",
             "## Resume Summary Draft",
             "",
-            *[f"- {line}" for line in summary_lines],
+            summary,
             "",
             "## Skills To Emphasize",
             "",
             *_markdown_items(skills_to_emphasize),
             "",
-            "## Experience / Project Bullets To Consider",
+            "## Resume Bullet Candidates",
             "",
             "Use only if true:",
             "",
             *_markdown_items(bullets),
             "",
-            "## Skills To Deprioritize Or Avoid",
+            "## Internal Review Notes",
             "",
-            *_markdown_items(missing_requirements),
+            "### Needs Verification",
             "",
-            "## Missing Proof To Resolve",
+            *_markdown_items(needs_verification),
+            "",
+            "### Skills To Avoid Unless Proven",
+            "",
+            *_markdown_items(skills_to_avoid),
+            "",
+            "### Missing Proof Next Actions",
             "",
             *_markdown_items(missing_proof_actions),
             "",
-            "## Review Checklist",
+            "## Final Review Checklist",
             "",
             "- Confirm every claim is true.",
             "- Remove unsupported skills.",
+            "- Replace generic bullets with real project/work examples.",
             "- Add metrics only if real.",
             "- Align the final resume with the job posting.",
             "",
@@ -839,24 +851,45 @@ def _build_tailored_resume_draft(
     )
 
 
-def _tailored_summary_lines(
+def _tailored_summary_draft(
     role_label: str,
     supported_requirements: list[str],
     profile_text: str | None,
-) -> list[str]:
-    lines = [
-        f"Technical candidate targeting {role_label} with emphasis on verified support, documentation, and tool-building evidence.",
-    ]
+) -> str:
+    strengths = []
     lowered_profile = (profile_text or "").lower()
     if any("python" in requirement.lower() for requirement in supported_requirements):
-        lines.append("Project and coursework exposure to Python scripting and local automation tools where supported by examples.")
+        strengths.append("Python-based tools")
     if any("api" in requirement.lower() for requirement in supported_requirements):
-        lines.append("Project exposure to REST APIs, JSON, or integrations where the resume can point to real work.")
+        strengths.append("API-driven workflows")
     if any("sql" in requirement.lower() or "data" in requirement.lower() for requirement in supported_requirements):
-        lines.append("Data-backed troubleshooting and SQL/database work where supported by reports, queries, or project data.")
+        strengths.append("SQL/data-backed troubleshooting")
+    if any(
+        marker in " ".join(supported_requirements).lower()
+        for marker in ["automation", "workflow"]
+    ):
+        strengths.append("workflow automation")
+    if any(
+        marker in " ".join(supported_requirements).lower()
+        for marker in ["ai agent", "llm", "prompt", "agent-building"]
+    ):
+        strengths.append("AI-assisted tooling")
     if "documentation" in lowered_profile:
-        lines.append("Strong documentation habits, user communication, and troubleshooting follow-through.")
-    return lines[:4]
+        strengths.append("technical documentation")
+    if "troubleshooting" in lowered_profile or "support" in lowered_profile:
+        strengths.append("user-facing troubleshooting")
+
+    if not strengths:
+        strengths = ["technical documentation", "user-facing troubleshooting"]
+
+    return (
+        "Technical professional targeting "
+        f"{role_label} with experience in "
+        + _format_inline_list(strengths[:6], "supported technical work")
+        + ". Brings practical experience supporting systems used by real users, "
+        "with project or coursework exposure included only where it can be backed "
+        "by specific examples."
+    )
 
 
 def _tailored_skills_to_emphasize(
@@ -872,23 +905,92 @@ def _tailored_skills_to_emphasize(
     return _dedupe(skills) or ["Use only skills that appear in the profile or evidence notes."]
 
 
-def _tailored_resume_bullets(
-    supported_items: list[dict[str, str]],
+def _tailored_resume_bullet_candidates(
+    supported_requirements: list[str],
     profile_text: str | None,
 ) -> list[str]:
+    requirement_text = " ".join(supported_requirements).lower()
     bullets = []
-    for item in supported_items:
-        requirement = item["requirement"]
-        notes = item["notes"]
-        if notes:
-            bullets.append(
-                f"Review and, if true, connect {requirement} to evidence: {notes}"
-            )
-        else:
-            bullets.append(f"Emphasized {requirement} only where the resume or project notes support it.")
+    if "python" in requirement_text:
+        bullets.append(
+            "Built or adapted Python scripts, support tools, or automation workflows to reduce manual technical work."
+        )
+    if "api" in requirement_text:
+        bullets.append(
+            "Worked with APIs, JSON, or integrations in projects, coursework, scripts, or technical troubleshooting."
+        )
+    if "sql" in requirement_text or "data" in requirement_text:
+        bullets.append(
+            "Used SQL, reports, queries, or data-backed troubleshooting to understand and improve a process."
+        )
+    if "automation" in requirement_text or "workflow" in requirement_text:
+        bullets.append(
+            "Improved or documented a recurring technical workflow so it could be completed more consistently."
+        )
+    if "ai agent" in requirement_text or "llm" in requirement_text or "prompt" in requirement_text:
+        bullets.append(
+            "Used AI-assisted tooling or prompt-driven workflows to support project planning, coding, documentation, or automation tasks."
+        )
     if not bullets and profile_text:
         bullets.append("Documented technical workflows and troubleshooting steps for users or teammates.")
     return bullets or ["Add bullets only after confirming real evidence for the role requirements."]
+
+
+def _tailored_needs_verification(
+    evidence_summary: dict[str, list[dict[str, str]]],
+) -> list[str]:
+    items = []
+    for item in evidence_summary["partial_evidence"]:
+        note = _clean_evidence_note(item.get("notes", ""))
+        detail = f" {note}" if note else ""
+        items.append(
+            f"{item['requirement']}: partial evidence; strengthen with a concrete project, coursework, or work example before emphasizing strongly.{detail}"
+        )
+    for item in evidence_summary["needs_verification"]:
+        note = _clean_evidence_note(item.get("notes", ""))
+        if note:
+            items.append(f"{item['requirement']}: needs verification. {note}")
+        else:
+            items.append(f"{item['requirement']}: needs verification before including.")
+    return _dedupe(items)
+
+
+def _tailored_skills_to_avoid(
+    evidence_summary: dict[str, list[dict[str, str]]],
+    missing_requirements: list[str],
+) -> list[str]:
+    avoid = list(missing_requirements)
+    for item in evidence_summary["missing_proof"]:
+        if item["requirement"] not in avoid:
+            avoid.append(item["requirement"])
+    avoid.extend(_implied_sensitive_skills(missing_requirements))
+    return _dedupe(avoid)
+
+
+def _implied_sensitive_skills(requirements: list[str]) -> list[str]:
+    text = " ".join(requirements).lower()
+    skills = []
+    if "cloud" in text or "deployment" in text or "aws" in text:
+        skills.append("Cloud tools/deployment")
+    if "ai agent" in text or "llm" in text or "agent" in text:
+        skills.append("Production AI engineering")
+        skills.append("Professional LLM framework expertise")
+    if "object-oriented" in text:
+        skills.append("Object-oriented design patterns")
+    return skills
+
+
+def _clean_evidence_note(note: str) -> str:
+    cleaned = str(note or "").strip()
+    for phrase in [
+        "Auto-suggested from profile:",
+        "profile appears to mention",
+        "Profile appears to mention",
+        "Verify the exact claim before using.",
+        "Verify exact examples before using.",
+    ]:
+        cleaned = cleaned.replace(phrase, "")
+    return " ".join(cleaned.split()).strip()
 
 
 def _markdown_items(values: list[str]) -> list[str]:
@@ -950,6 +1052,17 @@ def _possessive(value: str) -> str:
     if value.endswith("s"):
         return f"{value}'"
     return f"{value}'s"
+
+
+def _sentence(value: str) -> str:
+    text = value.strip()
+    if text.endswith((".", "!", "?")):
+        return text
+    return f"{text}."
+
+
+def _trim_sentence_period(value: str) -> str:
+    return value.rstrip(".!?")
 
 
 def _build_role_needs_sentence(matched_keywords: list[str]) -> str:

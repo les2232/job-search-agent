@@ -338,7 +338,7 @@ def test_saved_ai_packet_uses_same_requirements_as_analysis(tmp_path: Path) -> N
     assert "API integration experience" in notes
     assert "Object-oriented design patterns" in notes
     assert "Tailored Resume Draft" in tailored_resume
-    assert "Missing Proof To Resolve" in tailored_resume
+    assert "Missing Proof Next Actions" in tailored_resume
     assert "C# / .NET" not in notes
     assert "Angular 16+" not in notes
     assert "comparable full-stack development work" not in notes

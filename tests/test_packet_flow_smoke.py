@@ -75,7 +75,7 @@ def test_arrivia_ai_agent_packet_flow_smoke(tmp_path: Path) -> None:
     assert "Tailored Resume Draft" in tailored_resume
     assert "Python scripting/development" in tailored_resume
     assert "API integration experience" in tailored_resume
-    assert "Missing Proof To Resolve" in tailored_resume
+    assert "Missing Proof Next Actions" in tailored_resume
     assert ".NET/C#" not in packet_text
     assert "Angular/TypeScript" not in packet_text
     assert "comparable full-stack development work" not in packet_text
@@ -114,7 +114,7 @@ def test_fei_full_stack_packet_flow_smoke(tmp_path: Path) -> None:
     assert "Apply Only If" in notes
     assert "Consider Skipping Or Deprioritizing If" in notes
     assert "Tailored Resume Draft" in tailored_resume
-    assert "Missing Proof To Resolve" in tailored_resume
+    assert "Missing Proof Next Actions" in tailored_resume
     assert "Connected C# / .NET" not in tailored_resume
     assert "Connected Angular" not in tailored_resume
     assert "raw_text" not in packet_text
