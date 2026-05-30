@@ -160,7 +160,7 @@ def _show_guided_packet_builder(
             score_details = score_job(job)
             st.session_state["builder_job"] = job
             st.session_state["builder_score_details"] = score_details
-            st.session_state["builder_job_text"] = full_job_text
+            st.session_state["builder_full_job_text"] = full_job_text
             st.session_state.pop("builder_packet", None)
             st.session_state.pop("builder_saved_packet", None)
 
