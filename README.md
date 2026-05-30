@@ -160,6 +160,33 @@ The app parses job metadata from labeled fields when available:
 If labels are missing, it falls back to the top lines of the posting. Metadata
 that cannot be found stays `Unknown`.
 
+For copied job-board posts, add a short clean header above the pasted text so
+generic site labels such as `Job details` or `Job type` are not mistaken for job
+metadata:
+
+```text
+Job Title: Full-Stack Developer
+Company: FEI Systems
+Location: Remote
+Work Mode: Remote
+Job Type: Full-time
+
+Full Job Description:
+Paste the job-board description here.
+```
+
+Store real beta-user job posting files under ignored local folders such as:
+
+```text
+local_profiles/<profile_id>/job_postings/first-job.txt
+```
+
+Then score the file with the matching private profile:
+
+```powershell
+python .\src\main.py .\local_profiles\<profile_id>\job_postings\first-job.txt --profile <profile_id> --packet
+```
+
 Scoring rules live in `config.example.json`. You can create an ignored
 `config.local.json` to tune local scoring. The score explanation shows:
 

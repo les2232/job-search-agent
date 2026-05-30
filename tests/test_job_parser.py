@@ -71,3 +71,51 @@ def test_parse_job_text_uses_separate_fields_before_raw_text() -> None:
     assert job["title"] == "IT Support Analyst"
     assert job["company"] == "Example College"
     assert job["location"] == "Aurora, CO"
+
+
+def test_parse_job_text_uses_clean_header_fields_before_boilerplate() -> None:
+    job = parse_job_text(
+        """Job details
+Job type
+
+Job Title: Full-Stack Developer
+Company: FEI Systems
+Location: Remote
+Work Mode: Remote
+
+Full Job Description
+
+At FEI Systems...
+We're looking for a full-stack developer to support internal tools.
+"""
+    )
+
+    assert job["title"] == "Full-Stack Developer"
+    assert job["company"] == "FEI Systems"
+    assert job["location"] == "Remote"
+    assert job["work_mode"] == "Remote"
+
+
+def test_parse_job_text_ignores_job_board_boilerplate_from_copied_posting() -> None:
+    job = parse_job_text(
+        """Job details
+Here's how the job details align with your profile.
+Job type
+
+Full job description
+
+At FEI Systems...
+We're looking for a full-stack developer to build and maintain web applications.
+
+Required Skills/Experience
+- Python
+- JavaScript
+
+Location: Remote
+"""
+    )
+
+    assert job["title"] == "Full-Stack Developer"
+    assert job["company"] == "FEI Systems"
+    assert job["location"] == "Remote"
+    assert job["work_mode"] == "Remote"
