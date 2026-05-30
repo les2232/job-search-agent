@@ -119,3 +119,30 @@ Location: Remote
     assert job["company"] == "FEI Systems"
     assert job["location"] == "Remote"
     assert job["work_mode"] == "Remote"
+
+
+def test_parse_job_text_ignores_html_entities_from_copied_posting() -> None:
+    job = parse_job_text(
+        """Job details
+&nbsp;
+&
+ 
+Job type
+
+Full job description
+
+At FEI Systems...
+We're looking for a full-stack developer to build and maintain web applications.
+
+Required Skills/Experience
+- Python
+- JavaScript
+
+Location: Remote
+"""
+    )
+
+    assert job["title"] == "Full-Stack Developer"
+    assert job["company"] == "FEI Systems"
+    assert job["location"] == "Remote"
+    assert job["work_mode"] == "Remote"

@@ -1,5 +1,6 @@
 """Parse plain-text job descriptions into a small structured record."""
 
+import html
 import logging
 import re
 
@@ -74,7 +75,11 @@ def parse_job_text(
         parsed_location = _infer_location(top_lines)
         fallback_path = "top-line inference"
 
-    work_mode = _first_known_value(labeled_work_mode, _infer_work_mode(top_lines))
+    work_mode = _first_known_value(
+        labeled_work_mode,
+        _infer_work_mode([parsed_location]),
+        _infer_work_mode(top_lines),
+    )
     parser_debug = {
         "raw_preview": clean_text[:DEBUG_PREVIEW_CHARS],
         "parsed_title": parsed_title,
@@ -115,21 +120,29 @@ def _find_first_labeled_value(job_text: str, labels: list[str]) -> str:
 def _find_labeled_value(job_text: str, label: str) -> str:
     pattern = re.compile(rf"^{re.escape(label)}\s*:\s*(.+)$", flags=re.IGNORECASE)
     for line in job_text.splitlines():
-        clean_line = line.strip()
+        clean_line = _clean_copied_line(line)
         match = pattern.match(clean_line)
         if match:
-            value = match.group(1).strip()
+            value = _clean_copied_line(match.group(1))
             return value or "Unknown"
 
     return "Unknown"
 
 
 def _get_top_lines(job_text: str, limit: int = 50) -> list[str]:
-    return [
-        line.strip()
-        for line in job_text.splitlines()
-        if line.strip() and not _is_boilerplate_line(line)
-    ][:limit]
+    lines = []
+    for line in job_text.splitlines():
+        clean_line = _clean_copied_line(line)
+        if clean_line and not _is_boilerplate_line(clean_line):
+            lines.append(clean_line)
+    return lines[:limit]
+
+
+def _clean_copied_line(line: str) -> str:
+    text = html.unescape(line).replace("\u00a0", " ").strip()
+    if text in {"&", "Â"}:
+        return ""
+    return text
 
 
 def _first_known_value(*values: str) -> str:
