@@ -23,6 +23,21 @@ Required Skills/Experience
 - Test Driven Development
 """
 
+ARRIVIA_AI_JOB_TEXT = """
+Arrivia, Inc. is hiring an AI Agent Builder to improve automation workflows for
+travel operations. This remote role will build AI agents and API integrations
+that connect internal systems, data workflows, and user-facing support tools.
+
+Required Skills/Experience
+- Python scripting or Python development
+- SQL and data workflows
+- APIs and API integration
+- Automation and workflow automation
+- AI agent or agentic workflow experience
+- LLM workflows and prompt engineering
+- Object-oriented design patterns
+"""
+
 
 def test_score_job_clamps_to_100() -> None:
     job = {"raw_text": " ".join(POSITIVE_KEYWORDS)}
@@ -166,6 +181,48 @@ def test_extract_job_requirements_detects_fei_full_stack_requirements() -> None:
     assert "Unit testing" in hard_requirements
     assert "Test Driven Development" in hard_requirements
     assert any("4+ years" in item for item in requirements["experience_requirements"])
+
+
+def test_extract_job_requirements_detects_ai_automation_requirements() -> None:
+    requirements = extract_job_requirements(ARRIVIA_AI_JOB_TEXT)
+
+    hard_requirements = requirements["hard_requirements"]
+    assert "AI agent / agentic workflows" in hard_requirements
+    assert "LLM / large language model workflows" in hard_requirements
+    assert "Prompt engineering" in hard_requirements
+    assert "Python scripting/development" in hard_requirements
+    assert "SQL / data workflows" in hard_requirements
+    assert "API integration" in hard_requirements
+    assert "Automation workflows" in hard_requirements
+    assert "Object-oriented design patterns" in hard_requirements
+    assert "C# / .NET 5+" not in hard_requirements
+    assert "Angular 16+" not in hard_requirements
+
+
+def test_score_explanation_for_ai_role_separates_overlap_and_verification() -> None:
+    job = {
+        "title": "AI Agent Builder",
+        "company": "Arrivia, Inc.",
+        "location": "Austin, TX",
+        "work_mode": "Remote",
+        "raw_text": ARRIVIA_AI_JOB_TEXT,
+    }
+
+    score_details = score_job(job)
+    explanation = score_details["explanation"]
+    explanation_text = str(explanation)
+
+    assert "python" in score_details["matched_keywords"]
+    assert "sql" in score_details["matched_keywords"]
+    assert "apis" in score_details["matched_keywords"]
+    assert "automation" in score_details["matched_keywords"]
+    assert "data" in score_details["matched_keywords"]
+    assert "AI/automation overlap to support with evidence" in explanation_text
+    assert "Role-specific hard requirements to verify" in explanation_text
+    assert "AI agent / agentic workflows" in explanation_text
+    assert "For AI/automation roles" in explanation_text
+    assert "C# / .NET" not in explanation_text
+    assert "Angular" not in explanation_text
 
 
 def test_score_explanation_marks_many_hard_requirements_as_stretch() -> None:

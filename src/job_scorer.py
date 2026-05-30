@@ -11,6 +11,54 @@ NEGATIVE_KEYWORDS = BUILT_IN_SCORING_CONFIG["concern_keywords"]
 
 HARD_REQUIREMENT_PATTERNS = [
     (
+        "ai_automation",
+        "AI agent / agentic workflows",
+        [
+            r"\bai agents?\b",
+            r"\bagent builder\b",
+            r"\bagentic workflows?\b",
+            r"\bai[- ]powered workflows?\b",
+        ],
+    ),
+    (
+        "ai_automation",
+        "LLM / large language model workflows",
+        [r"\bllms?\b", r"\blarge language models?\b"],
+    ),
+    (
+        "ai_automation",
+        "Prompt engineering",
+        [r"\bprompt engineering\b", r"\bprompting\b"],
+    ),
+    (
+        "ai_automation",
+        "RAG / retrieval augmented generation",
+        [r"\brag\b", r"\bretrieval augmented generation\b"],
+    ),
+    (
+        "ai_automation",
+        "Embeddings / vector database",
+        [r"\bembeddings?\b", r"\bvector databases?\b", r"\bvector stores?\b"],
+    ),
+    (
+        "ai_automation",
+        "Agent-building tools or LLM platforms",
+        [
+            r"\blangchain\b",
+            r"\bllamaindex\b",
+            r"\bopenai\b",
+            r"\bclaude\b",
+            r"\bgemini\b",
+            r"\baws bedrock\b",
+            r"\bbedrock\b",
+        ],
+    ),
+    (
+        "programming_languages_frameworks",
+        "Python scripting/development",
+        [r"\bpython\b", r"\bpython scripting\b", r"\bpython development\b"],
+    ),
+    (
         "programming_languages_frameworks",
         "C# / .NET 5+",
         [r"\bc#\b", r"\.net\s*(?:5\+|5|6|7|8|core)?"],
@@ -22,9 +70,29 @@ HARD_REQUIREMENT_PATTERNS = [
     ),
     ("programming_languages_frameworks", "TypeScript", [r"\btypescript\b"]),
     (
+        "integration_automation",
+        "API integration",
+        [r"\bapis?\b", r"\bapi integrations?\b", r"\bintegrat(?:e|ion|ions)\b"],
+    ),
+    (
+        "integration_automation",
+        "Automation workflows",
+        [r"\bautomation\b", r"\bworkflow automation\b", r"\bautomated workflows?\b"],
+    ),
+    (
         "databases",
         "SQL Server / relational database",
         [r"\bsql server\b", r"\brelational database"],
+    ),
+    (
+        "databases",
+        "SQL / data workflows",
+        [r"\bsql\b", r"\bdata workflows?\b", r"\bdatabase workflows?\b"],
+    ),
+    (
+        "data_engineering",
+        "Data pipelines / ETL",
+        [r"\bdata pipelines?\b", r"\betl\b"],
     ),
     (
         "cloud_devops_tools",
@@ -35,6 +103,16 @@ HARD_REQUIREMENT_PATTERNS = [
         "cloud_devops_tools",
         "AWS serverless",
         [r"\baws\b", r"\bserverless\b", r"\blambda\b"],
+    ),
+    (
+        "cloud_devops_tools",
+        "Cloud tools / deployment",
+        [r"\bcloud\b", r"\bdeployment\b", r"\bdeploy\b"],
+    ),
+    (
+        "integration_automation",
+        "Workflow orchestration",
+        [r"\borchestration\b", r"\bworkflow tools?\b"],
     ),
     (
         "architecture_design",
@@ -169,7 +247,7 @@ def build_score_explanation(
     job_requirements: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Explain the score using deterministic, user-facing rules."""
-    strengths = _build_strengths(matched_keywords, job)
+    strengths = _build_strengths(matched_keywords, job, job_requirements)
     gaps = _build_gaps(missing_keywords, scoring_config, job_requirements)
     explanation_concerns = _build_concerns(concerns, job)
     tailoring_suggestions = _build_tailoring_suggestions(
@@ -228,7 +306,11 @@ def _build_fit_summary(
     )
 
 
-def _build_strengths(matched_keywords: list[str], job: dict[str, str]) -> list[str]:
+def _build_strengths(
+    matched_keywords: list[str],
+    job: dict[str, str],
+    job_requirements: dict[str, object] | None = None,
+) -> list[str]:
     strengths = []
     if matched_keywords:
         strengths.append(
@@ -240,6 +322,26 @@ def _build_strengths(matched_keywords: list[str], job: dict[str, str]) -> list[s
     work_mode = job.get("work_mode", "Unknown")
     if work_mode != "Unknown":
         strengths.append(f"Work mode detected: {work_mode}.")
+
+    hard_requirements = _requirement_list(job_requirements, "hard_requirements")
+    if _has_ai_automation_requirements(hard_requirements):
+        overlap = []
+        normalized_matches = {keyword.lower() for keyword in matched_keywords}
+        for label, markers in [
+            ("Python scripting/development", {"python"}),
+            ("API integration", {"api", "apis"}),
+            ("automation workflows", {"automation"}),
+            ("SQL/data workflows", {"sql", "data"}),
+            ("remote collaboration", {"remote"}),
+        ]:
+            if normalized_matches.intersection(markers):
+                overlap.append(label)
+        if overlap:
+            strengths.append(
+                "AI/automation overlap to support with evidence: "
+                + ", ".join(overlap)
+                + "."
+            )
 
     return strengths
 
@@ -260,6 +362,12 @@ def _build_gaps(
             + ", ".join(hard_requirements[:10])
             + "."
         ]
+        if _has_ai_automation_requirements(hard_requirements):
+            gaps.append(
+                "For AI/automation roles, verify real evidence for Python, APIs, "
+                "automation workflows, SQL/data work, and any AI agent or LLM tooling "
+                "named in the posting."
+            )
         if experience_requirements:
             gaps.append(
                 "Experience requirements to verify: "
@@ -335,6 +443,23 @@ def _build_tailoring_suggestions(
         suggestions.append("Consider skipping unless the role has other strong non-keyword reasons.")
 
     return suggestions
+
+
+def _has_ai_automation_requirements(hard_requirements: list[str]) -> bool:
+    joined = " ".join(hard_requirements).lower()
+    return any(
+        marker in joined
+        for marker in [
+            "ai agent",
+            "agentic",
+            "llm",
+            "prompt",
+            "rag",
+            "automation",
+            "api integration",
+            "python scripting",
+        ]
+    )
 
 
 def _concern_phrase(concerns: list[str]) -> str:

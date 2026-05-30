@@ -361,6 +361,16 @@ def _build_supported_overlap_items(supported_overlap: list[str]) -> list[str]:
             "SQL/database work, if supported by database, query, reporting, or data-backed troubleshooting examples": (
                 "SQL/database work, if supported by database queries, reports, or data-backed troubleshooting."
             ),
+            "Python scripting/development, if supported by coursework, scripts, or software projects": (
+                "Python, if supported by coursework, scripts, or software projects."
+            ),
+            "APIs/integrations, if supported by projects or technical work": (
+                "APIs / integrations, if supported by projects or technical work."
+            ),
+            "automation or workflow improvement, if supported by real examples": (
+                "Automation or workflow improvement, if supported by real examples."
+            ),
+            "data-backed troubleshooting": "Data-backed troubleshooting and documentation.",
             "remote collaboration": "Remote collaboration and clear communication.",
             "documentation": "Technical documentation.",
             "user-facing technical troubleshooting": "User-facing technical troubleshooting and documentation.",
@@ -401,6 +411,21 @@ def _build_transferable_support_items(profile_themes: list[str]) -> list[str]:
 def _build_apply_only_if_items(requirements_to_verify: list[str]) -> list[str]:
     if not requirements_to_verify:
         return ["The candidate can support the main role requirements with real examples."]
+    if _has_ai_automation_requirements(requirements_to_verify):
+        return [
+            (
+                "The candidate can point to real Python, API, automation, SQL, "
+                "AI assistant, or agent-building examples."
+            ),
+            (
+                "The candidate can explain at least one project or workflow where "
+                "they improved, automated, or integrated a technical process."
+            ),
+            (
+                "The candidate can honestly connect their profile to the role "
+                "without pretending to have production AI engineering experience."
+            ),
+        ]
     return [
         (
             "The candidate can show direct evidence of .NET/C#, Angular/TypeScript, "
@@ -418,6 +443,15 @@ def _build_apply_only_if_items(requirements_to_verify: list[str]) -> list[str]:
 def _build_consider_skipping_items(requirements_to_verify: list[str]) -> list[str]:
     if not requirements_to_verify:
         return ["The role is not worth the tailoring time or does not support the candidate's goals."]
+    if _has_ai_automation_requirements(requirements_to_verify):
+        return [
+            "The candidate has no Python, automation, API, SQL, or AI/project evidence.",
+            "The candidate would rely almost entirely on interest rather than demonstrable work.",
+            (
+                "The posting expects production-level AI/agent experience that "
+                "the candidate cannot support."
+            ),
+        ]
     return [
         "The candidate's experience is mostly IT support with little software development evidence.",
         "The candidate cannot support the required years of full-stack development.",
@@ -431,6 +465,31 @@ def _build_resume_bullet_suggestions(
     supported_overlap: list[str],
     requirements_to_verify: list[str],
 ) -> list[str]:
+    if _has_ai_automation_requirements(requirements_to_verify):
+        bullets = [
+            (
+                "Use only if true: Built or adapted Python scripts, support tools, "
+                "or automation workflows to reduce manual technical work."
+            ),
+            (
+                "Use only if true: Worked with APIs or integrations in projects, "
+                "coursework, scripts, or technical troubleshooting."
+            ),
+            (
+                "Use only if true: Used SQL, reports, queries, or data-backed "
+                "troubleshooting to understand and improve a process."
+            ),
+            (
+                "Use only if true: Documented technical workflows so users or team "
+                "members could resolve recurring issues more consistently."
+            ),
+            (
+                "Do not claim production AI agent, LLM framework, or professional "
+                "AI engineering experience unless the profile or resume supports it."
+            ),
+        ]
+        return bullets
+
     bullets = [
         (
             "Use only if true: Used Git/version control in coursework, scripts, "
@@ -471,6 +530,12 @@ def _build_keywords_to_include_honestly(
         labels.append("Git / version control, only if supported.")
     if "remote" in normalized_keywords:
         labels.append("Remote collaboration.")
+    if "apis" in normalized_keywords or "api" in normalized_keywords:
+        labels.append("APIs / integrations, only if supported.")
+    if "automation" in normalized_keywords:
+        labels.append("Automation or workflow improvement, only if supported.")
+    if "data" in normalized_keywords:
+        labels.append("Data-backed technical work, only if supported.")
     if "documentation" in normalized_keywords or "documentation" in profile_themes:
         labels.append("Technical documentation.")
     if any(theme in profile_themes for theme in ["frontline IT support", "classroom/AV troubleshooting"]):
@@ -478,7 +543,7 @@ def _build_keywords_to_include_honestly(
     if profile_themes or "remote" in normalized_keywords:
         labels.append("Clear communication and follow-through.")
     for keyword in matched_keywords:
-        if keyword.lower() not in {"sql", "database", "git", "github", "remote", "documentation"}:
+        if keyword.lower() not in {"sql", "database", "git", "github", "remote", "apis", "api", "automation", "data", "documentation"}:
             label = f"{keyword.title()}, only if supported."
             if label not in labels:
                 labels.append(label)
@@ -565,6 +630,10 @@ def _build_company_reason(company_label: str, source_text: str) -> str:
 
 def _mission_context(source_text: str) -> str:
     normalized = source_text.lower()
+    if "ai agent" in normalized or "agentic workflow" in normalized:
+        return "building useful AI and automation workflows"
+    if "workflow automation" in normalized:
+        return "improving technical workflows through automation"
     if "health and human services" in normalized:
         return "building technology for health and human services"
     if "access to care" in normalized or "support" in normalized and "care" in normalized:
@@ -591,15 +660,20 @@ def _build_role_needs_sentence(matched_keywords: list[str]) -> str:
         )
     return (
         "That experience connects with the role's emphasis on "
-        + _format_inline_list(needs[:3], "dependable technical work")
+        + _format_inline_list(needs[:4], "dependable technical work")
         + "."
     )
 
 
 def _human_role_needs(matched_keywords: list[str]) -> list[str]:
     keyword_map = {
-        "sql": "database-backed systems",
+        "python": "Python scripting",
+        "sql": "database-backed systems and data-backed problem solving",
         "git": "version control",
+        "apis": "API integrations",
+        "api": "API integrations",
+        "automation": "automation and workflow improvement",
+        "data": "data-backed problem solving",
         "remote": "remote collaboration",
         "documentation": "clear documentation",
         "troubleshooting": "practical troubleshooting",
@@ -712,10 +786,18 @@ def _supported_overlap(
 ) -> list[str]:
     overlap = []
     hard_requirements = _requirement_values(job_requirements, "hard_requirements")
+    if any(keyword.lower() == "python" for keyword in matched_keywords):
+        overlap.append("Python scripting/development, if supported by coursework, scripts, or software projects")
+    if any(keyword.lower() in {"api", "apis"} for keyword in matched_keywords):
+        overlap.append("APIs/integrations, if supported by projects or technical work")
+    if any(keyword.lower() == "automation" for keyword in matched_keywords):
+        overlap.append("automation or workflow improvement, if supported by real examples")
     if any(keyword.lower() in {"git", "github"} for keyword in matched_keywords):
         overlap.append("Git/version control, if supported by the candidate's profile or projects")
     if any(keyword.lower() in {"sql", "database", "data"} for keyword in matched_keywords):
         overlap.append("SQL/database work, if supported by database, query, reporting, or data-backed troubleshooting examples")
+    if any(keyword.lower() == "data" for keyword in matched_keywords):
+        overlap.append("data-backed troubleshooting")
     if any(keyword.lower() == "remote" for keyword in matched_keywords):
         overlap.append("remote collaboration")
     for theme, label in [
@@ -752,7 +834,14 @@ def _requirement_supported(
     normalized_matches = {keyword.lower() for keyword in matched_keywords}
     support_markers = {
         "SQL Server / relational database": ["sql", "database", "relational database"],
+        "SQL / data workflows": ["sql", "data", "database"],
         "Git / Azure DevOps / CI/CD": ["git", "azure devops", "ci/cd"],
+        "Python scripting/development": ["python", "python scripting", "python development"],
+        "API integration": ["api", "apis", "api integration", "integrations"],
+        "Automation workflows": ["automation", "workflow automation", "automated"],
+        "Data pipelines / ETL": ["data pipeline", "etl"],
+        "Cloud tools / deployment": ["cloud", "deployment", "deploy"],
+        "Workflow orchestration": ["orchestration", "workflow tools"],
     }
     markers = support_markers.get(requirement, [requirement.lower()])
     if any(marker in normalized_matches for marker in markers):
@@ -770,6 +859,14 @@ def _profile_supports(profile_text: str | None, markers: list[str]) -> bool:
 def _is_overlap_relevant(value: str, hard_requirements: list[str]) -> bool:
     if value in {"communication and user support", "documentation", "troubleshooting", "follow-through in support workflows", "remote collaboration"}:
         return True
+    if value.startswith("Python scripting/development"):
+        return "Python scripting/development" in hard_requirements
+    if value.startswith("APIs/integrations"):
+        return "API integration" in hard_requirements
+    if value.startswith("automation or workflow improvement"):
+        return "Automation workflows" in hard_requirements
+    if value == "data-backed troubleshooting":
+        return "SQL / data workflows" in hard_requirements
     if value == "Git/version control":
         return "Git / Azure DevOps / CI/CD" in hard_requirements
     if value in {"SQL/database work", "SQL Server / relational database"}:
@@ -817,6 +914,19 @@ def _display_requirements(requirements: list[str]) -> list[str]:
             "Service Oriented Architecture": "Domain Driven Design and Service Oriented Architecture",
             "Unit testing": "Unit testing and Test Driven Development",
             "Test Driven Development": "Unit testing and Test Driven Development",
+            "AI agent / agentic workflows": "AI agent or automation workflow experience",
+            "LLM / large language model workflows": "LLM or large language model workflow experience",
+            "Prompt engineering": "Prompt engineering or prompting experience",
+            "RAG / retrieval augmented generation": "RAG / retrieval augmented generation experience",
+            "Embeddings / vector database": "Embeddings or vector database experience",
+            "Agent-building tools or LLM platforms": "Agent-building tools or LLM platform experience",
+            "Python scripting/development": "Python scripting/development",
+            "API integration": "API integration experience",
+            "Automation workflows": "Automation workflow experience",
+            "SQL / data workflows": "SQL/data workflow experience",
+            "Data pipelines / ETL": "Data pipelines / ETL experience",
+            "Cloud tools / deployment": "Cloud tools or deployment experience",
+            "Workflow orchestration": "Workflow orchestration experience",
         }.get(requirement, requirement)
         if "years" in mapped.lower():
             mapped = "Required years of full-stack software development experience"
@@ -842,6 +952,22 @@ def _build_transferable_theme_note(profile_themes: list[str]) -> str:
 def _build_apply_skip_guidance(requirements_to_verify: list[str]) -> list[str]:
     if not requirements_to_verify:
         return []
+    if _has_ai_automation_requirements(requirements_to_verify):
+        return [
+            (
+                "Apply only if: you can point to real Python, API, automation, "
+                "SQL, AI assistant, or agent-building examples; you can explain "
+                "a project or workflow where you improved, automated, or integrated "
+                "a technical process; and you can avoid overstating production AI "
+                "engineering experience."
+            ),
+            (
+                "Consider skipping or deprioritizing if: you have no Python, "
+                "automation, API, SQL, or AI/project evidence; you would rely "
+                "mostly on interest; or the posting expects production-level "
+                "AI/agent experience you cannot support."
+            ),
+        ]
     return [
         (
             "Apply only if: you can show direct evidence of .NET/C#, "
@@ -864,6 +990,30 @@ def _requirement_values(job_requirements: dict[str, object], key: str) -> list[s
     if not isinstance(values, list):
         return []
     return [str(value) for value in values if str(value).strip()]
+
+
+def _has_ai_automation_requirements(requirements: list[str]) -> bool:
+    text = " ".join(requirements).lower()
+    return any(
+        marker in text
+        for marker in [
+            "ai agent",
+            "agentic",
+            "llm",
+            "large language",
+            "prompt",
+            "rag",
+            "retrieval",
+            "embeddings",
+            "vector database",
+            "python scripting",
+            "api integration",
+            "automation workflow",
+            "sql/data",
+            "data pipelines",
+            "workflow orchestration",
+        ]
+    )
 
 
 def _dedupe(values: list[str]) -> list[str]:

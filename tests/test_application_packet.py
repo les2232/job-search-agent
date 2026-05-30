@@ -19,6 +19,21 @@ Required Skills/Experience
 - Test Driven Development
 """
 
+ARRIVIA_AI_JOB_TEXT = """
+Arrivia, Inc. is hiring an AI Agent Builder to improve automation workflows for
+travel operations. This remote role will build AI agents and API integrations
+that connect internal systems, data workflows, and user-facing support tools.
+
+Required Skills/Experience
+- Python scripting or Python development
+- SQL and data workflows
+- APIs and API integration
+- Automation and workflow automation
+- AI agent or agentic workflow experience
+- LLM workflows and prompt engineering
+- Object-oriented design patterns
+"""
+
 
 def _score_result(
     score: int,
@@ -80,6 +95,31 @@ def _fei_score_result() -> dict[str, object]:
         },
         "job_requirements": extract_job_requirements(FEI_JOB_TEXT),
         "raw_text": FEI_JOB_TEXT,
+    }
+
+
+def _arrivia_score_result() -> dict[str, object]:
+    return {
+        "job_metadata": {
+            "title": "AI Agent Builder",
+            "company": "Arrivia, Inc.",
+            "location": "Austin, TX",
+            "work_mode": "Remote",
+        },
+        "score": 80,
+        "recommendation": "Apply",
+        "matched_keywords": ["python", "sql", "apis", "automation", "data", "remote"],
+        "missing_keywords": ["dashboard", "linux"],
+        "concerns": [],
+        "explanation": {
+            "fit_summary": "Strong overlap with AI/automation requirements to verify.",
+            "strengths": ["Matched fit keywords: python, sql, apis, automation, data, remote"],
+            "gaps": ["Role-specific hard requirements to verify."],
+            "concerns": ["No concern keywords or metadata issues were found."],
+            "tailoring_suggestions": ["Review AI/automation evidence before applying."],
+        },
+        "job_requirements": extract_job_requirements(ARRIVIA_AI_JOB_TEXT),
+        "raw_text": ARRIVIA_AI_JOB_TEXT,
     }
 
 
@@ -380,3 +420,56 @@ def test_fei_risk_notes_are_concise_and_role_specific() -> None:
     assert "python" not in risk_text.lower()
     assert "dashboard" not in risk_text.lower()
     assert "linux" not in risk_text.lower()
+
+
+def test_ai_agent_packet_uses_ai_automation_strategy_without_full_stack_leakage() -> None:
+    packet = generate_application_packet(
+        _arrivia_score_result(),
+        (
+            "Profile includes Python scripts, SQL reports, API experiments, "
+            "automation projects, documentation, data troubleshooting, and IT support."
+        ),
+    )
+    strategy = packet["resume_strategy_sections"]
+    strategy_text = str(strategy)
+    risk_text = " ".join(packet["risk_notes"])
+
+    assert strategy["fit_verdict"] == "Strong Target"
+    assert "Python, if supported" in strategy_text
+    assert "APIs / integrations" in strategy_text
+    assert "Automation or workflow improvement" in strategy_text
+    assert "AI agent or automation workflow experience" in strategy_text
+    assert "LLM or large language model workflow experience" in strategy_text
+    assert "Prompt engineering or prompting experience" in strategy_text
+    assert "Object-oriented design patterns" in strategy_text
+    assert "production AI engineering experience" in strategy_text
+    assert "AI agent or automation workflow experience" in risk_text
+    assert ".NET/C#" not in strategy_text
+    assert "Angular/TypeScript" not in strategy_text
+    assert "comparable full-stack development work" not in strategy_text
+    assert "dashboard" not in risk_text.lower()
+    assert "linux" not in risk_text.lower()
+
+
+def test_ai_agent_cover_letter_mentions_automation_without_false_ai_claims() -> None:
+    packet = generate_application_packet(
+        _arrivia_score_result(),
+        (
+            "Profile includes Python scripts, SQL reports, API experiments, "
+            "automation projects, documentation, data troubleshooting, and IT support."
+        ),
+    )
+    cover_letter = packet["cover_letter_draft"]
+    cover_letter_lower = cover_letter.lower()
+
+    assert "AI Agent Builder" in cover_letter
+    assert "Arrivia, Inc." in cover_letter
+    assert "AI and automation workflows" in cover_letter
+    assert "API integrations" in cover_letter
+    assert "automation and workflow improvement" in cover_letter
+    assert "data-backed problem solving" in cover_letter
+    assert "production ai agent" not in cover_letter_lower
+    assert "llm framework expertise" not in cover_letter_lower
+    assert "professional ai engineering experience" not in cover_letter_lower
+    assert ".net" not in cover_letter_lower
+    assert "angular" not in cover_letter_lower
