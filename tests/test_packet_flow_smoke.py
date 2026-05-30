@@ -75,6 +75,8 @@ def test_arrivia_ai_agent_packet_flow_smoke(tmp_path: Path) -> None:
     assert "Tailored Resume Draft" in tailored_resume
     assert "Python scripting/development" in tailored_resume
     assert "API integration experience" in tailored_resume
+    assert "Project Evidence To Use" in tailored_resume
+    assert "Job Search Automation Tool" in tailored_resume
     assert "Missing Proof Next Actions" in tailored_resume
     assert ".NET/C#" not in packet_text
     assert "Angular/TypeScript" not in packet_text

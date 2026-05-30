@@ -1,5 +1,7 @@
 """Build deterministic application packet guidance from a scored job."""
 
+from profile_manager import parse_proof_blocks
+
 
 REVIEW_WARNING = (
     "Draft only. Review carefully before using. "
@@ -35,6 +37,7 @@ def generate_application_packet(
     explanation_concerns = _explanation_list(explanation, "concerns")
     source_text = _source_text(score_result)
     job_requirements = _job_requirements(score_result)
+    proof_blocks = parse_proof_blocks(profile_text)
 
     profile_themes = _find_profile_themes(profile_text)
     role_label = _role_label(metadata)
@@ -136,6 +139,7 @@ def generate_application_packet(
             evidence_summary,
             missing_proof_actions,
             profile_text,
+            proof_blocks,
         ),
         "recruiter_message": _build_recruiter_message(
             display_role_label,
@@ -774,6 +778,7 @@ def _build_tailored_resume_draft(
     evidence_summary: dict[str, list[dict[str, str]]],
     missing_proof_actions: list[str],
     profile_text: str | None,
+    proof_blocks: list[dict[str, object]],
 ) -> str:
     supported_items = evidence_summary["supported_evidence"] + evidence_summary["partial_evidence"]
     supported_requirements = [item["requirement"] for item in supported_items]
@@ -790,7 +795,19 @@ def _build_tailored_resume_draft(
         supported_requirements,
         resume_strategy_sections,
     )
-    bullets = _tailored_resume_bullet_candidates(supported_requirements, profile_text)
+    matching_proof_blocks = _matching_proof_blocks(
+        proof_blocks,
+        supported_requirements,
+    )
+    project_evidence = _project_evidence_items(
+        matching_proof_blocks,
+        supported_requirements,
+    )
+    bullets = _tailored_resume_bullet_candidates(
+        supported_requirements,
+        profile_text,
+        matching_proof_blocks,
+    )
     needs_verification = _tailored_needs_verification(evidence_summary)
     skills_to_avoid = _tailored_skills_to_avoid(
         evidence_summary,
@@ -824,6 +841,10 @@ def _build_tailored_resume_draft(
             "Use only if true:",
             "",
             *_markdown_items(bullets),
+            "",
+            "## Project Evidence To Use",
+            "",
+            *_markdown_items(project_evidence),
             "",
             "## Internal Review Notes",
             "",
@@ -908,9 +929,12 @@ def _tailored_skills_to_emphasize(
 def _tailored_resume_bullet_candidates(
     supported_requirements: list[str],
     profile_text: str | None,
+    proof_blocks: list[dict[str, object]] | None = None,
 ) -> list[str]:
     requirement_text = " ".join(supported_requirements).lower()
     bullets = []
+    project_bullets = _project_grounded_bullets(proof_blocks or [], requirement_text)
+    bullets.extend(project_bullets)
     if "python" in requirement_text:
         bullets.append(
             "Built or adapted Python scripts, support tools, or automation workflows to reduce manual technical work."
@@ -934,6 +958,124 @@ def _tailored_resume_bullet_candidates(
     if not bullets and profile_text:
         bullets.append("Documented technical workflows and troubleshooting steps for users or teammates.")
     return bullets or ["Add bullets only after confirming real evidence for the role requirements."]
+
+
+def _matching_proof_blocks(
+    proof_blocks: list[dict[str, object]],
+    requirements: list[str],
+) -> list[dict[str, object]]:
+    matches = []
+    for block in proof_blocks:
+        if any(_proof_block_matches_requirement(block, requirement) for requirement in requirements):
+            matches.append(block)
+    return matches[:4]
+
+
+def _proof_block_matches_requirement(
+    proof_block: dict[str, object],
+    requirement: str,
+) -> bool:
+    text = _proof_block_search_text(proof_block)
+    requirement_lower = requirement.lower()
+    marker_groups = []
+    if "python" in requirement_lower:
+        marker_groups.append(["python"])
+    if "api" in requirement_lower:
+        marker_groups.append(["api", "apis", "json", "openai api", "broker/data api"])
+    if "sql" in requirement_lower or "data" in requirement_lower or "database" in requirement_lower:
+        marker_groups.append(["sql", "sqlite", "pandas", "dashboard", "report", "logs", "data"])
+    if "automation" in requirement_lower or "workflow" in requirement_lower:
+        marker_groups.append(["automation", "workflow", "packet generation", "cli", "support tools"])
+    if any(marker in requirement_lower for marker in ["ai agent", "llm", "prompt", "agent-building"]):
+        marker_groups.append(["openai", "prompt", "assistant", "ai", "agent", "codex"])
+    if "testing" in requirement_lower or "unit" in requirement_lower or "test driven" in requirement_lower:
+        marker_groups.append(["pytest", "testing", "evaluation", "validation"])
+    if not marker_groups:
+        marker_groups.append([requirement_lower])
+    return any(any(marker in text for marker in markers) for markers in marker_groups)
+
+
+def _proof_block_search_text(proof_block: dict[str, object]) -> str:
+    values = [str(proof_block.get("name", ""))]
+    tools = proof_block.get("tools")
+    if isinstance(tools, list):
+        values.extend(str(tool) for tool in tools)
+    bullets = proof_block.get("bullets")
+    if isinstance(bullets, list):
+        values.extend(str(bullet) for bullet in bullets)
+    values.append(str(proof_block.get("raw_text", "")))
+    return " ".join(values).lower()
+
+
+def _project_evidence_items(
+    proof_blocks: list[dict[str, object]],
+    requirements: list[str],
+) -> list[str]:
+    items = []
+    for block in proof_blocks:
+        name = str(block.get("name", "")).strip()
+        if not name:
+            continue
+        labels = _proof_block_requirement_labels(block, requirements)
+        if labels:
+            items.append(f"{name} - supports {_format_inline_list(labels[:6], 'relevant evidence')}.")
+    return items
+
+
+def _proof_block_requirement_labels(
+    proof_block: dict[str, object],
+    requirements: list[str],
+) -> list[str]:
+    labels = []
+    label_map = [
+        ("Python", ["python"]),
+        ("Streamlit", ["streamlit"]),
+        ("Flask", ["flask"]),
+        ("API/JSON workflows", ["api", "apis", "json", "openai api", "broker/data api"]),
+        ("SQL/SQLite or data workflows", ["sql", "sqlite", "pandas", "dashboard", "report", "logs"]),
+        ("automation/workflow tooling", ["automation", "workflow", "packet generation", "cli"]),
+        ("testing or validation", ["pytest", "testing", "evaluation", "validation"]),
+        ("AI-assisted tooling or prompt workflows", ["openai", "prompt", "assistant", "ai", "agent"]),
+        ("technical documentation", ["documentation", "knowledge base", "troubleshooting"]),
+    ]
+    text = _proof_block_search_text(proof_block)
+    requirement_text = " ".join(requirements).lower()
+    for label, markers in label_map:
+        if any(marker in text for marker in markers) and any(
+            marker in requirement_text or label.lower().split("/")[0] in requirement_text
+            for marker in markers
+        ):
+            labels.append(label)
+    return _dedupe(labels)
+
+
+def _project_grounded_bullets(
+    proof_blocks: list[dict[str, object]],
+    requirement_text: str,
+) -> list[str]:
+    bullets = []
+    for block in proof_blocks:
+        name = str(block.get("name", ""))
+        text = _proof_block_search_text(block)
+        if name == "Job Search Automation Tool" and (
+            "python" in requirement_text or "automation" in requirement_text
+        ):
+            bullets.append(
+                "Built a local-first Python and Streamlit application that parses job postings, detects hard-skill gaps, maps candidate evidence, and generates tailored application packets."
+            )
+        elif name == "IT Support Assistant" and (
+            "api" in requirement_text or "ai" in requirement_text or "support" in text
+        ):
+            bullets.append(
+                "Developed a Flask-based IT support assistant using local knowledge base retrieval, SQLite logging, structured troubleshooting flows, and evaluation scripts."
+            )
+        elif name == "TradeOS / Dashboard Project" and (
+            "data" in requirement_text or "api" in requirement_text or "dashboard" in text
+        ):
+            bullets.append(
+                "Built Streamlit dashboard/reporting tools using Python, Pandas, SQLite/event logging, and API-connected project workflows."
+            )
+    return _dedupe(bullets)
 
 
 def _tailored_needs_verification(

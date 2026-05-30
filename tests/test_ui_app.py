@@ -281,3 +281,46 @@ def test_evidence_suggestions_are_not_all_not_sure_when_profile_has_matches() ->
 
     assert counts["Some evidence"] + counts["Strong evidence"] >= 3
     assert suggestions["Cloud tools or deployment experience"]["status"] == "Not sure"
+
+
+def test_evidence_suggestions_mention_matching_proof_blocks() -> None:
+    proof_blocks = [
+        {
+            "name": "Job Search Automation Tool",
+            "tools": ["Python", "Streamlit", "JSON", "pytest"],
+            "bullets": [
+                "Built a local-first Python tool with validation checks and packet generation."
+            ],
+            "raw_text": "Python Streamlit JSON pytest packet generation",
+        },
+        {
+            "name": "IT Support Assistant",
+            "tools": ["Python", "Flask", "SQLite", "OpenAI API", "JSON"],
+            "bullets": ["Developed retrieval and support workflows."],
+            "raw_text": "Python Flask SQLite OpenAI API JSON support workflows",
+        },
+        {
+            "name": "TradeOS / Dashboard Project",
+            "tools": ["Python", "Pandas", "SQLite/event logging", "API workflows"],
+            "bullets": ["Created dashboards, reporting, and API workflow concepts."],
+            "raw_text": "Pandas SQLite dashboards reporting API workflows",
+        },
+    ]
+
+    suggestions = _suggest_evidence_answers(
+        {
+            "resume_text": PROFILE_TEXT,
+            "proof_blocks": proof_blocks,
+        },
+        [
+            "Python scripting/development",
+            "API integration experience",
+            "SQL/data workflow experience",
+            "Automation workflow experience",
+        ],
+    )
+
+    assert "Job Search Automation Tool" in suggestions["Python scripting/development"]["notes"]
+    assert "IT Support Assistant" in suggestions["API integration experience"]["notes"]
+    assert "TradeOS / Dashboard Project" in suggestions["SQL/data workflow experience"]["notes"]
+    assert "Job Search Automation Tool" in suggestions["Automation workflow experience"]["notes"]

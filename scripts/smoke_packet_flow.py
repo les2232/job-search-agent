@@ -128,6 +128,8 @@ def _assert_arrivia(
     _require("Decision: Apply Carefully" in tailored_resume or "Decision: Strong Match" in tailored_resume, "Arrivia tailored resume missing decision.")
     _require("Python scripting/development" in tailored_resume, "Arrivia tailored resume missing Python guidance.")
     _require("API integration experience" in tailored_resume, "Arrivia tailored resume missing API guidance.")
+    _require("Project Evidence To Use" in tailored_resume, "Arrivia tailored resume missing project evidence section.")
+    _require("Job Search Automation Tool" in tailored_resume, "Arrivia tailored resume missing matching proof block.")
     _require("raw_text" not in packet_text, "Arrivia packet JSON included raw_text.")
 
 

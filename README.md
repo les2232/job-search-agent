@@ -270,6 +270,28 @@ and production engineering claims. Treat the generated resume bullets as
 reviewable candidates, replace generic wording with real examples, and remove
 anything you cannot support before applying.
 
+### Proof Library
+
+Private profiles can include a Markdown proof library in
+`local_profiles/<profile_id>/resume_base.md`:
+
+```text
+## Project Evidence / Proof Library
+
+### Project Name
+
+**Tools / Skills:** Python, Streamlit, SQLite
+
+* Evidence bullet you can explain in an interview.
+```
+
+The Streamlit app shows proof blocks for the selected profile and lets local
+profiles append new private proof blocks from the UI. Proof library data should
+stay under `local_profiles/`, which is ignored by Git. These proof blocks help
+Evidence Check suggest specific project anchors and help `tailored_resume.md`
+include a `Project Evidence To Use` section. Do not include claims you cannot
+explain in an interview.
+
 Saved packets go under:
 
 ```text

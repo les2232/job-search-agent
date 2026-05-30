@@ -5,9 +5,12 @@ import pytest
 
 from application_packet import generate_application_packet
 from profile_manager import (
+    append_proof_block,
+    format_proof_block,
     get_default_profile,
     list_profiles,
     load_profile,
+    parse_proof_blocks,
     profile_applications_dir,
     safe_profile_id,
 )
@@ -138,3 +141,81 @@ def test_profile_applications_dir_uses_profile_id(tmp_path: Path) -> None:
     path = profile_applications_dir(tmp_path / "applications", profile)
 
     assert path == tmp_path / "applications" / "leslie-profile"
+
+
+def test_parse_proof_blocks_reads_project_names_tools_and_bullets() -> None:
+    resume_text = """
+# Profile
+
+## Project Evidence / Proof Library
+
+### Job Search Automation Tool
+
+**Tools / Skills:** Python, Streamlit, JSON, pytest
+
+* Built a local-first packet generator.
+* Added smoke tests and validation checks.
+
+### IT Support Assistant
+
+**Tools / Skills:** Python, Flask, SQLite, OpenAI API
+**Use Carefully:** Do not claim production AI engineering.
+**Target Role Tags:** AI automation, support engineering
+
+* Developed support assistant workflows.
+
+## Skills To Use Carefully
+"""
+
+    blocks = parse_proof_blocks(resume_text)
+
+    assert [block["name"] for block in blocks] == [
+        "Job Search Automation Tool",
+        "IT Support Assistant",
+    ]
+    assert blocks[0]["tools"] == ["Python", "Streamlit", "JSON", "pytest"]
+    assert blocks[0]["bullets"] == [
+        "Built a local-first packet generator.",
+        "Added smoke tests and validation checks.",
+    ]
+    assert blocks[1]["use_carefully_notes"] == "Do not claim production AI engineering."
+    assert blocks[1]["target_role_tags"] == ["AI automation", "support engineering"]
+
+
+def test_parse_proof_blocks_handles_missing_section_gracefully() -> None:
+    assert parse_proof_blocks("# Profile\n\nNo proof library yet.") == []
+
+
+def test_append_proof_block_preserves_existing_profile_text(tmp_path: Path) -> None:
+    resume_path = tmp_path / "resume_base.md"
+    resume_path.write_text("# Profile\n\nExisting notes.", encoding="utf-8")
+
+    append_proof_block(
+        resume_path,
+        "Job Search Automation Tool",
+        "Python, Streamlit, pytest",
+        ["Built a local-first packet generator."],
+        use_carefully_notes="Do not overstate production experience.",
+        target_role_tags="automation, tooling",
+    )
+    text = resume_path.read_text(encoding="utf-8")
+    blocks = parse_proof_blocks(text)
+
+    assert "Existing notes." in text
+    assert "## Project Evidence / Proof Library" in text
+    assert blocks[0]["name"] == "Job Search Automation Tool"
+    assert blocks[0]["tools"] == ["Python", "Streamlit", "pytest"]
+    assert blocks[0]["bullets"] == ["Built a local-first packet generator."]
+
+
+def test_format_proof_block_normalizes_text_fields() -> None:
+    block = format_proof_block(
+        "TradeOS / Dashboard Project",
+        ["Python", "Streamlit", "Pandas"],
+        "* Built dashboard tooling.\n- Added reporting.",
+    )
+
+    assert "### TradeOS / Dashboard Project" in block
+    assert "**Tools / Skills:** Python, Streamlit, Pandas" in block
+    assert "* Built dashboard tooling." in block
+    assert "* Added reporting." in block

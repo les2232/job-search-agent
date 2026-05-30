@@ -34,6 +34,34 @@ Required Skills/Experience
 - Object-oriented design patterns
 """
 
+PROOF_LIBRARY_PROFILE_TEXT = """
+Profile includes Python scripts, SQL reports, API experiments, automation projects,
+documentation, data troubleshooting, and IT support.
+
+## Project Evidence / Proof Library
+
+### Job Search Automation Tool
+
+**Tools / Skills:** Python, Streamlit, Markdown, JSON, CSV, pytest, Git/GitHub, local-first automation
+
+* Built a local-first Python tool that parses job posting text, scores role fit with configurable rules, tracks opportunities, and generates job-specific application materials.
+* Created CLI and Streamlit workflows for scoring jobs, reviewing a tracker, and producing tailored resume/cover-letter packet drafts while keeping sensitive resume and job-search data local.
+
+### IT Support Assistant
+
+**Tools / Skills:** Python, Flask, SQLite, retrieval logic, local knowledge base, OpenAI API, JSON-style responses, evaluation scripts, technical documentation
+
+* Developed a Flask-based internal IT support assistant that routes user questions to approved local knowledge base content and produces guided troubleshooting responses.
+* Implemented Python routing/retrieval logic, response profiles, optional OpenAI API support, SQLite request/feedback logging, and evaluation scripts.
+
+### TradeOS / Dashboard Project
+
+**Tools / Skills:** Python, Streamlit, Pandas, SQLite/event logging, YAML configuration, API workflows, Git/GitHub, testing, dashboard design
+
+* Built Python-based trading research and dashboard tooling with Streamlit views, SQLite/event logging, YAML configuration, Pandas data workflows, and structured reporting.
+* Worked with broker/data API workflow concepts through Alpaca-related project tooling, emphasizing paper/simulated trading and operator visibility.
+"""
+
 
 def _score_result(
     score: int,
@@ -588,3 +616,28 @@ def test_tailored_resume_separates_resume_draft_from_internal_review_notes() -> 
     assert "Used AI-assisted tooling or prompt-driven workflows" in resume_section
     assert "API integration experience: partial evidence" in internal_section
     assert "Confirm every claim is true." in tailored_resume
+
+
+def test_tailored_resume_includes_relevant_project_evidence_blocks() -> None:
+    packet = generate_application_packet(
+        _arrivia_score_result(),
+        PROOF_LIBRARY_PROFILE_TEXT,
+        evidence_answers={
+            "Python scripting/development": {"status": "Strong evidence", "notes": "Python projects."},
+            "API integration": {"status": "Some evidence", "notes": "API projects."},
+            "SQL / data workflows": {"status": "Some evidence", "notes": "SQLite reports."},
+            "Automation workflows": {"status": "Some evidence", "notes": "Automation workflows."},
+            "AI agent / agentic workflows": {"status": "Some evidence", "notes": "Assistant tooling."},
+            "Prompt engineering": {"status": "Some evidence", "notes": "Prompt workflows."},
+        },
+    )
+    tailored_resume = packet["tailored_resume_draft"]
+
+    assert "## Project Evidence To Use" in tailored_resume
+    assert "Job Search Automation Tool - supports" in tailored_resume
+    assert "IT Support Assistant - supports" in tailored_resume
+    assert "TradeOS / Dashboard Project - supports" in tailored_resume
+    assert "Built a local-first Python and Streamlit application" in tailored_resume
+    assert "Developed a Flask-based IT support assistant" in tailored_resume
+    assert "Built Streamlit dashboard/reporting tools" in tailored_resume
+    assert "Production AI engineering" not in tailored_resume.split("## Internal Review Notes", 1)[0]

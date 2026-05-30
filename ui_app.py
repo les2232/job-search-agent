@@ -29,6 +29,7 @@ from application_packet_writer import save_application_packet
 from job_parser import parse_job_text
 from job_scorer import score_job
 from profile_manager import DEFAULT_PROFILE_ID
+from profile_manager import append_proof_block
 from profile_manager import list_profiles
 from profile_manager import profile_applications_dir
 from tracker import filter_tracked_jobs
@@ -409,8 +410,15 @@ def _suggest_evidence_answers(
     requirements: list[str],
 ) -> dict[str, dict[str, str]]:
     profile_text = str(profile.get("resume_text") or "")
+    proof_blocks = profile.get("proof_blocks")
+    if not isinstance(proof_blocks, list):
+        proof_blocks = []
     return {
-        requirement: _suggest_evidence_for_requirement(profile_text, requirement)
+        requirement: _suggest_evidence_for_requirement(
+            profile_text,
+            requirement,
+            proof_blocks=proof_blocks,
+        )
         for requirement in requirements
     }
 
@@ -418,6 +426,7 @@ def _suggest_evidence_answers(
 def _suggest_evidence_for_requirement(
     profile_text: str,
     requirement: str,
+    proof_blocks: list[dict[str, object]] | None = None,
 ) -> dict[str, str]:
     normalized_profile = profile_text.lower()
     normalized_requirement = requirement.lower()
@@ -431,6 +440,10 @@ def _suggest_evidence_for_requirement(
                 "Do not include unless there is direct project/work evidence."
             ),
         }
+
+    proof_suggestion = _suggest_from_proof_blocks(normalized_requirement, proof_blocks or [])
+    if proof_suggestion:
+        return proof_suggestion
 
     if "python" in normalized_requirement:
         return _suggest_from_markers(
@@ -524,6 +537,126 @@ def _suggest_evidence_for_requirement(
         "status": "Not sure",
         "notes": "Review manually against resume, projects, coursework, or work examples.",
     }
+
+
+def _suggest_from_proof_blocks(
+    normalized_requirement: str,
+    proof_blocks: list[dict[str, object]],
+) -> dict[str, str] | None:
+    matching_blocks = [
+        block
+        for block in proof_blocks
+        if _proof_block_matches_requirement(block, normalized_requirement)
+    ]
+    if not matching_blocks:
+        return None
+
+    names = [str(block.get("name", "")).strip() for block in matching_blocks if str(block.get("name", "")).strip()]
+    name_text = _format_names(names[:3])
+    if not name_text:
+        return None
+
+    if "python" in normalized_requirement:
+        return {
+            "status": "Strong evidence",
+            "notes": (
+                f"Auto-suggested from profile: profile evidence includes {name_text} "
+                "with Python-related work. Verify exact bullets before using."
+            ),
+        }
+    if "api" in normalized_requirement:
+        return {
+            "status": "Some evidence",
+            "notes": (
+                f"Auto-suggested from profile: profile evidence includes {name_text} "
+                "with API or JSON workflow exposure. Confirm concrete examples."
+            ),
+        }
+    if "sql" in normalized_requirement or "data" in normalized_requirement or "database" in normalized_requirement:
+        return {
+            "status": "Some evidence",
+            "notes": (
+                f"Auto-suggested from profile: profile evidence includes {name_text} "
+                "with SQLite logging/reporting, dashboards, or data-backed troubleshooting."
+            ),
+        }
+    if "automation" in normalized_requirement or "workflow" in normalized_requirement:
+        return {
+            "status": "Some evidence",
+            "notes": (
+                f"Auto-suggested from profile: profile evidence includes workflow automation "
+                f"in {name_text}. Confirm exact examples."
+            ),
+        }
+    if (
+        "prompt" in normalized_requirement
+        or "llm" in normalized_requirement
+        or "large language" in normalized_requirement
+        or "ai agent" in normalized_requirement
+        or "agentic" in normalized_requirement
+        or "agent-building" in normalized_requirement
+    ):
+        if any(_has_strong_ai_evidence(_proof_block_search_text(block)) for block in matching_blocks):
+            return {
+                "status": "Strong evidence",
+                "notes": (
+                    f"Auto-suggested from profile: profile evidence includes {name_text} "
+                    "with explicit production/deployed/professional AI evidence. Confirm the exact example before using."
+                ),
+            }
+        return {
+            "status": "Some evidence",
+            "notes": (
+                f"Auto-suggested from profile: profile evidence includes {name_text} "
+                "with AI assistant/tooling or prompt workflow exposure. Do not claim production experience unless supported."
+            ),
+        }
+    return {
+        "status": "Some evidence",
+        "notes": (
+            f"Auto-suggested from profile: profile evidence includes {name_text}. "
+            "Confirm exact bullets before using."
+        ),
+    }
+
+
+def _proof_block_matches_requirement(
+    proof_block: dict[str, object],
+    normalized_requirement: str,
+) -> bool:
+    text = _proof_block_search_text(proof_block)
+    marker_groups = []
+    if "python" in normalized_requirement:
+        marker_groups.append(["python"])
+    if "api" in normalized_requirement:
+        marker_groups.append(["api", "apis", "json", "openai api", "broker/data api"])
+    if "sql" in normalized_requirement or "data" in normalized_requirement or "database" in normalized_requirement:
+        marker_groups.append(["sql", "sqlite", "pandas", "dashboard", "report", "logs", "data"])
+    if "automation" in normalized_requirement or "workflow" in normalized_requirement:
+        marker_groups.append(["automation", "workflow", "packet generation", "cli", "support tools"])
+    if any(marker in normalized_requirement for marker in ["ai agent", "llm", "large language", "prompt", "agentic", "agent-building"]):
+        marker_groups.append(["openai", "prompt", "assistant", "ai", "agent", "codex"])
+    if not marker_groups:
+        marker_groups.append([normalized_requirement])
+    return any(any(marker in text for marker in markers) for markers in marker_groups)
+
+
+def _proof_block_search_text(proof_block: dict[str, object]) -> str:
+    values = [str(proof_block.get("name", ""))]
+    for key in ["tools", "bullets", "target_role_tags"]:
+        value = proof_block.get(key)
+        if isinstance(value, list):
+            values.extend(str(item) for item in value)
+    values.append(str(proof_block.get("raw_text", "")))
+    return " ".join(values).lower()
+
+
+def _format_names(names: list[str]) -> str:
+    if not names:
+        return ""
+    if len(names) == 1:
+        return names[0]
+    return " / ".join(names)
 
 
 def _suggest_from_markers(
@@ -1305,11 +1438,81 @@ def _show_profile_selector() -> dict[str, object]:
     if not profile.get("resume_text"):
         st.info("This profile does not have resume_base.md text yet.")
 
+    _show_proof_library(profile)
+
     if st.session_state.get("active_profile_id") != profile["profile_id"]:
         st.session_state["active_profile_id"] = profile["profile_id"]
         st.session_state.pop("score_application_packet", None)
         st.session_state.pop("saved_score_application_packet", None)
     return profile
+
+
+def _show_proof_library(profile: dict[str, object]) -> None:
+    profile_id = str(profile.get("profile_id", "profile"))
+    proof_blocks = profile.get("proof_blocks")
+    if not isinstance(proof_blocks, list):
+        proof_blocks = []
+
+    with st.expander("Profile / Proof Library"):
+        st.caption(
+            "Proof blocks are the evidence the app uses to support resume claims. "
+            "Add projects, work examples, coursework, or tools you can explain in an interview."
+        )
+        if proof_blocks:
+            st.markdown("**Existing proof blocks**")
+            for block in proof_blocks:
+                with st.container(border=True):
+                    st.markdown(f"**{block.get('name', 'Untitled proof block')}**")
+                    tools = block.get("tools")
+                    if isinstance(tools, list) and tools:
+                        st.caption("Tools / skills: " + ", ".join(str(tool) for tool in tools))
+                    bullets = block.get("bullets")
+                    if isinstance(bullets, list):
+                        for bullet in bullets[:3]:
+                            st.write(f"- {bullet}")
+        else:
+            st.info("No proof blocks found yet.")
+
+        if not profile.get("is_local"):
+            st.warning(
+                "Create or select a local profile before saving private proof library data."
+            )
+            return
+
+        st.markdown("**Add proof block**")
+        with st.form(f"proof_library_add_{profile_id}"):
+            name = st.text_input("Project / experience name")
+            tools = st.text_input("Tools / skills", placeholder="Python, Streamlit, SQLite")
+            bullets = st.text_area(
+                "Evidence bullets",
+                height=130,
+                placeholder="Add one bullet per line. Use claims you can explain in an interview.",
+            )
+            use_carefully = st.text_area(
+                "Use carefully notes",
+                height=70,
+                placeholder="Optional: list claims or tools to avoid overstating.",
+            )
+            target_tags = st.text_input(
+                "Target role tags",
+                placeholder="Optional: AI automation, backend, support engineering",
+            )
+            submitted = st.form_submit_button("Add Proof Block")
+
+        if submitted:
+            if not name.strip() or not bullets.strip():
+                st.warning("Add a project name and at least one evidence bullet.")
+                return
+            append_proof_block(
+                profile["resume_path"],
+                name,
+                tools,
+                bullets,
+                use_carefully_notes=use_carefully,
+                target_role_tags=target_tags,
+            )
+            st.success("Proof block added to the selected local profile.")
+            st.rerun()
 
 
 def _get_job_text_input(key_prefix: str) -> str:
