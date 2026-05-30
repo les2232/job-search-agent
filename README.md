@@ -243,6 +243,25 @@ The cover letter draft is employer-facing. Internal cautions and verification
 reminders stay in the risk notes, checklist, score explanation, and resume
 tailoring notes.
 
+## Evidence Check + Tailored Resume Draft
+
+The guided UI includes an evidence check after job analysis. For each detected
+hard requirement, mark whether the candidate has strong evidence, some evidence,
+no evidence, or is not sure. Add short notes that point to real resume, project,
+coursework, or work examples.
+
+The app uses those answers to generate:
+
+- a decision summary
+- supported, partial, missing, and needs-verification evidence groups
+- missing-proof next actions
+- a reviewable `tailored_resume.md` draft
+
+The tailored resume draft is not a final resume. It is a local review aid that
+must be checked manually before use. The app does not invent resume claims, and
+you should remove unsupported skills, avoid fake metrics, and keep professional
+experience separate from coursework or project exposure.
+
 Saved packets go under:
 
 ```text
@@ -255,6 +274,7 @@ Each saved packet includes:
 job_summary.md
 score_explanation.md
 resume_tailoring_notes.md
+tailored_resume.md
 cover_letter_draft.md
 recruiter_message.txt
 application_checklist.md

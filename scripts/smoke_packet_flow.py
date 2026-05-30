@@ -60,19 +60,25 @@ def _run_fixture(fixture_name: str) -> None:
     profile_text = PROFILE_FIXTURE.read_text(encoding="utf-8")
     job = parse_job_text(job_text)
     score_result = score_job(job)
-    packet = generate_application_packet(score_result, profile_text)
+    evidence_answers = _fixture_evidence(fixture_name)
+    packet = generate_application_packet(
+        score_result,
+        profile_text,
+        evidence_answers=evidence_answers,
+    )
 
     with TemporaryDirectory(prefix="packet-flow-smoke-") as temp_dir:
         result = save_application_packet(packet, score_result, Path(temp_dir))
         output_paths = result["output_paths"]
         notes = output_paths["resume_tailoring_notes"].read_text(encoding="utf-8")
+        tailored_resume = output_paths["tailored_resume"].read_text(encoding="utf-8")
         payload = json.loads(output_paths["packet_json"].read_text(encoding="utf-8"))
 
     if fixture_name == "arrivia_ai_agent":
-        _assert_arrivia(job, score_result, notes, payload)
+        _assert_arrivia(job, score_result, notes, tailored_resume, payload)
         print("PASS Arrivia AI Agent packet flow")
     elif fixture_name == "fei_full_stack":
-        _assert_fei(job, score_result, notes, payload)
+        _assert_fei(job, score_result, notes, tailored_resume, payload)
         print("PASS FEI Full-Stack stretch packet flow")
     else:
         raise SmokeFailure(f"Unknown fixture: {fixture_name}")
@@ -82,6 +88,7 @@ def _assert_arrivia(
     job: dict[str, object],
     score_result: dict[str, object],
     notes: str,
+    tailored_resume: str,
     payload: dict[str, object],
 ) -> None:
     hard_requirements = _hard_requirements(score_result)
@@ -117,6 +124,10 @@ def _assert_arrivia(
         _require(expected_text in notes, f"Arrivia notes missing: {expected_text}")
     for stale_text in [".NET/C#", "Angular/TypeScript", "comparable full-stack development work"]:
         _require(stale_text not in packet_text, f"Arrivia packet has stale text: {stale_text}")
+    _require("Tailored Resume Draft" in tailored_resume, "Arrivia tailored_resume.md was not written.")
+    _require("Decision: Apply Carefully" in tailored_resume or "Decision: Strong Match" in tailored_resume, "Arrivia tailored resume missing decision.")
+    _require("Python scripting/development" in tailored_resume, "Arrivia tailored resume missing Python guidance.")
+    _require("API integration experience" in tailored_resume, "Arrivia tailored resume missing API guidance.")
     _require("raw_text" not in packet_text, "Arrivia packet JSON included raw_text.")
 
 
@@ -124,6 +135,7 @@ def _assert_fei(
     job: dict[str, object],
     score_result: dict[str, object],
     notes: str,
+    tailored_resume: str,
     payload: dict[str, object],
 ) -> None:
     hard_requirements = _hard_requirements(score_result)
@@ -145,7 +157,65 @@ def _assert_fei(
     _require("Stretch Role" in notes, "FEI packet did not mark stretch role.")
     _require("Apply Only If" in notes, "FEI packet missing apply guidance.")
     _require("Consider Skipping Or Deprioritizing If" in notes, "FEI packet missing skip guidance.")
+    _require("Tailored Resume Draft" in tailored_resume, "FEI tailored_resume.md was not written.")
+    _require("Missing Proof To Resolve" in tailored_resume, "FEI tailored resume missing proof guidance.")
+    _require("Connected C# / .NET" not in tailored_resume, "FEI tailored resume falsely claimed .NET evidence.")
+    _require("Connected Angular" not in tailored_resume, "FEI tailored resume falsely claimed Angular evidence.")
     _require("raw_text" not in packet_text, "FEI packet JSON included raw_text.")
+
+
+def _fixture_evidence(fixture_name: str) -> dict[str, dict[str, str]]:
+    if fixture_name == "arrivia_ai_agent":
+        return {
+            "Python scripting/development": {
+                "status": "Strong evidence",
+                "notes": "Python scripts, local tools, and automation projects.",
+            },
+            "API integration": {
+                "status": "Some evidence",
+                "notes": "API experiments and REST/JSON local tools.",
+            },
+            "SQL / data workflows": {
+                "status": "Some evidence",
+                "notes": "SQL reports, SQLite-backed tools, and data troubleshooting.",
+            },
+            "Automation workflows": {
+                "status": "Some evidence",
+                "notes": "Workflow automation projects and local tooling.",
+            },
+            "AI agent / agentic workflows": {
+                "status": "Some evidence",
+                "notes": "AI assistant and packet-generation tooling projects.",
+            },
+            "LLM / large language model workflows": {
+                "status": "Not sure",
+                "notes": "Review LLM-specific project evidence before claiming this.",
+            },
+            "Prompt engineering": {
+                "status": "Some evidence",
+                "notes": "Structured prompting and content validation workflows.",
+            },
+            "Agent-building tools or LLM platforms": {
+                "status": "Not sure",
+                "notes": "Verify platform-specific evidence before claiming this.",
+            },
+            "Object-oriented design patterns": {
+                "status": "Not sure",
+                "notes": "Verify coursework or project evidence.",
+            },
+        }
+    if fixture_name == "fei_full_stack":
+        return {
+            "C# / .NET 5+": {"status": "No evidence", "notes": ""},
+            "Angular 16+": {"status": "No evidence", "notes": ""},
+            "TypeScript": {"status": "No evidence", "notes": ""},
+            "AWS serverless": {"status": "No evidence", "notes": ""},
+            "Domain Driven Design": {"status": "No evidence", "notes": ""},
+            "Service Oriented Architecture": {"status": "No evidence", "notes": ""},
+            "Unit testing": {"status": "Some evidence", "notes": "pytest/unit testing in Python projects."},
+            "Test Driven Development": {"status": "Not sure", "notes": ""},
+        }
+    return {}
 
 
 def _hard_requirements(score_result: dict[str, object]) -> list[str]:

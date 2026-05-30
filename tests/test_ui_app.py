@@ -1,6 +1,8 @@
 from ui_app import (
+    _evidence_requirements,
     _find_duplicate_saved_packets,
     _recommendation_guidance,
+    _requirement_slug,
     _saved_packet_table_row,
     _saved_packets_for_queue,
     _score_analysis_key,
@@ -148,3 +150,20 @@ def test_score_analysis_key_changes_when_hard_requirements_change() -> None:
     )
 
     assert _score_analysis_key(original) != _score_analysis_key(updated)
+
+
+def test_evidence_requirement_helpers_are_stable() -> None:
+    score_result = _score_result(
+        hard_requirements=[
+            "API integration",
+            "LLM / large language model workflows",
+        ],
+    )
+    score_result["job_requirements"]["experience_requirements"] = ["3+ years automation experience"]
+
+    assert _requirement_slug("LLM / large language model workflows") == "llm-large-language-model-workflows"
+    assert _evidence_requirements(score_result) == [
+        "API integration",
+        "LLM / large language model workflows",
+        "3+ years automation experience",
+    ]

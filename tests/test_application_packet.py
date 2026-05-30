@@ -473,3 +473,66 @@ def test_ai_agent_cover_letter_mentions_automation_without_false_ai_claims() -> 
     assert "professional ai engineering experience" not in cover_letter_lower
     assert ".net" not in cover_letter_lower
     assert "angular" not in cover_letter_lower
+
+
+def test_evidence_answers_drive_decision_summary_and_missing_proof() -> None:
+    packet = generate_application_packet(
+        _arrivia_score_result(),
+        (
+            "Profile includes Python scripts, SQL reports, API experiments, "
+            "automation projects, documentation, data troubleshooting, and IT support."
+        ),
+        evidence_answers={
+            "Python scripting/development": {
+                "status": "Strong evidence",
+                "notes": "Python scripts and local automation tools.",
+            },
+            "API integration": {
+                "status": "Some evidence",
+                "notes": "REST API project and JSON integrations.",
+            },
+            "SQL / data workflows": {
+                "status": "Some evidence",
+                "notes": "SQLite reports and data troubleshooting.",
+            },
+            "LLM / large language model workflows": {
+                "status": "No evidence",
+                "notes": "",
+            },
+        },
+    )
+
+    decision = packet["decision_summary"]
+    evidence = packet["evidence_summary"]
+    tailored_resume = packet["tailored_resume_draft"]
+
+    assert decision["decision"] in {"Apply Carefully", "Deprioritize"}
+    assert any(item["requirement"] == "Python scripting/development" for item in evidence["supported_evidence"])
+    assert any(item["requirement"] == "API integration experience" for item in evidence["partial_evidence"])
+    assert any(item["requirement"] == "LLM or large language model workflow experience" for item in evidence["missing_proof"])
+    assert any("LLM" in action for action in packet["missing_proof_actions"])
+    assert "Tailored Resume Draft" in tailored_resume
+    assert "Python scripting/development" in tailored_resume
+    assert "API integration experience" in tailored_resume
+    assert "LLM or large language model workflow experience" in tailored_resume
+
+
+def test_tailored_resume_does_not_claim_unsupported_fei_requirements() -> None:
+    packet = generate_application_packet(
+        _fei_score_result(),
+        "Local IT support, documentation, troubleshooting, git, SQL, and pytest.",
+        evidence_answers={
+            "C# / .NET 5+": {"status": "No evidence", "notes": ""},
+            "Angular 16+": {"status": "No evidence", "notes": ""},
+            "AWS serverless": {"status": "No evidence", "notes": ""},
+            "Unit testing": {"status": "Some evidence", "notes": "pytest tests in Python projects."},
+        },
+    )
+    tailored_resume = packet["tailored_resume_draft"]
+
+    assert "Tailored Resume Draft" in tailored_resume
+    assert "C# / .NET 5+ professional experience" in tailored_resume
+    assert "Angular 16+ and TypeScript" in tailored_resume
+    assert "Connected C# / .NET" not in tailored_resume
+    assert "Connected Angular" not in tailored_resume
+    assert "pytest tests in Python projects" in tailored_resume

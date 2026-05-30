@@ -172,6 +172,7 @@ def test_save_application_packet_writes_expected_files(tmp_path: Path) -> None:
     assert output_paths["job_summary"].exists()
     assert output_paths["score_explanation"].exists()
     assert output_paths["resume_tailoring_notes"].exists()
+    assert output_paths["tailored_resume"].exists()
     assert output_paths["cover_letter_draft"].exists()
     assert output_paths["recruiter_message"].exists()
     assert output_paths["application_checklist"].exists()
@@ -325,6 +326,7 @@ def test_saved_ai_packet_uses_same_requirements_as_analysis(tmp_path: Path) -> N
     )
 
     notes = result["output_paths"]["resume_tailoring_notes"].read_text(encoding="utf-8")
+    tailored_resume = result["output_paths"]["tailored_resume"].read_text(encoding="utf-8")
     payload = json.loads(
         result["output_paths"]["packet_json"].read_text(encoding="utf-8")
     )
@@ -335,6 +337,8 @@ def test_saved_ai_packet_uses_same_requirements_as_analysis(tmp_path: Path) -> N
     assert "Prompt engineering or prompting experience" in notes
     assert "API integration experience" in notes
     assert "Object-oriented design patterns" in notes
+    assert "Tailored Resume Draft" in tailored_resume
+    assert "Missing Proof To Resolve" in tailored_resume
     assert "C# / .NET" not in notes
     assert "Angular 16+" not in notes
     assert "comparable full-stack development work" not in notes

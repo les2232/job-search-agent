@@ -241,6 +241,8 @@ def _show_builder_analysis(
     else:
         st.info(guidance["message"])
 
+    evidence_answers = _show_evidence_check(profile, score_details, analysis_key)
+
     generate_clicked = False
     if _is_skip_recommendation(score_details):
         with st.expander("Generate a packet for this Skip role anyway"):
@@ -262,8 +264,10 @@ def _show_builder_analysis(
         st.session_state["builder_packet"] = generate_application_packet(
             score_details,
             profile.get("resume_text"),
+            evidence_answers=evidence_answers,
         )
         st.session_state["builder_packet_analysis_key"] = analysis_key
+        st.session_state["builder_evidence_answers"] = evidence_answers
         st.session_state.pop("builder_saved_packet", None)
 
     packet = st.session_state.get("builder_packet")
@@ -331,6 +335,45 @@ def _show_analysis_details(score_details: dict[str, object]) -> None:
         _show_inline_list("Concerns", score_details.get("concerns"))
 
 
+def _show_evidence_check(
+    profile: dict[str, object],
+    score_details: dict[str, object],
+    analysis_key: tuple[object, ...],
+) -> dict[str, dict[str, str]]:
+    requirements = _evidence_requirements(score_details)
+    if not requirements:
+        return {}
+
+    st.subheader("Evidence Check")
+    st.caption(
+        "Map each major requirement to real resume, project, coursework, or work evidence before generating the packet."
+    )
+    evidence_answers = {}
+    profile_id = str(profile.get("profile_id", "profile"))
+    analysis_slug = _requirement_slug("|".join(str(item) for item in analysis_key))
+    for requirement in requirements:
+        requirement_slug = _requirement_slug(requirement)
+        key_prefix = f"evidence_{profile_id}_{analysis_slug}_{requirement_slug}"
+        with st.container(border=True):
+            st.markdown(f"**{requirement}**")
+            status = st.selectbox(
+                "Evidence status",
+                ["Not sure", "Strong evidence", "Some evidence", "No evidence"],
+                key=f"{key_prefix}_status",
+            )
+            notes = st.text_area(
+                "Evidence notes",
+                key=f"{key_prefix}_notes",
+                height=80,
+                placeholder="Example: Built small API projects in coursework and used REST APIs in local tools.",
+            )
+        evidence_answers[requirement] = {
+            "status": status,
+            "notes": notes.strip(),
+        }
+    return evidence_answers
+
+
 def _show_packet_preview(
     packet: dict[str, object],
     score_details: dict[str, object],
@@ -345,7 +388,9 @@ def _show_packet_preview(
 
     preview_tabs = st.tabs(
         [
+            "Decision Summary",
             "Resume Strategy",
+            "Tailored Resume",
             "Cover Letter",
             "Checklist",
             "Score Explanation",
@@ -353,15 +398,29 @@ def _show_packet_preview(
         ]
     )
     with preview_tabs[0]:
-        _show_resume_strategy(packet)
+        _show_decision_summary(packet.get("decision_summary"))
     with preview_tabs[1]:
-        st.text(str(packet.get("cover_letter_draft", "")))
+        _show_resume_strategy(packet)
     with preview_tabs[2]:
-        _show_plain_list(packet.get("application_checklist"))
+        st.markdown(str(packet.get("tailored_resume_draft", "")))
     with preview_tabs[3]:
-        _show_score_explanation(score_details.get("explanation"))
+        st.text(str(packet.get("cover_letter_draft", "")))
     with preview_tabs[4]:
+        _show_plain_list(packet.get("application_checklist"))
+    with preview_tabs[5]:
+        _show_score_explanation(score_details.get("explanation"))
+    with preview_tabs[6]:
         _show_plain_list(packet.get("risk_notes"))
+
+
+def _show_decision_summary(value: object) -> None:
+    if not isinstance(value, dict):
+        st.caption("No decision summary was generated.")
+        return
+    st.subheader(str(value.get("decision", "Review")))
+    _show_plain_list(value.get("why"))
+    st.markdown("**Next action**")
+    st.write(str(value.get("next_action", "Review before applying.")))
 
 
 def _show_resume_strategy(packet: dict[str, object]) -> None:
@@ -373,6 +432,8 @@ def _show_resume_strategy(packet: dict[str, object]) -> None:
         _show_plain_list(strategy.get("supported_overlap"))
         st.markdown("**Major Requirements To Verify Before Applying**")
         _show_plain_list(strategy.get("major_requirements_to_verify"))
+        st.markdown("**Evidence Summary**")
+        _show_evidence_summary(packet.get("evidence_summary"))
         st.markdown("**Apply Only If**")
         _show_plain_list(strategy.get("apply_only_if"))
         st.markdown("**Consider Skipping Or Deprioritizing If**")
@@ -388,6 +449,30 @@ def _show_resume_strategy(packet: dict[str, object]) -> None:
     _show_plain_list(packet.get("keywords_to_include_honestly"))
     st.markdown("**Keywords To Verify Or Avoid**")
     _show_plain_list(packet.get("keywords_to_avoid_or_verify"))
+    st.markdown("**Missing Proof Next Actions**")
+    _show_plain_list(packet.get("missing_proof_actions"))
+
+
+def _show_evidence_summary(value: object) -> None:
+    if not isinstance(value, dict):
+        st.caption("No evidence answers were provided.")
+        return
+    for label, key in [
+        ("Supported evidence", "supported_evidence"),
+        ("Partial evidence", "partial_evidence"),
+        ("Missing proof", "missing_proof"),
+        ("Needs verification", "needs_verification"),
+    ]:
+        st.markdown(f"*{label}*")
+        items = value.get(key)
+        if not isinstance(items, list) or not items:
+            st.caption("None.")
+            continue
+        for item in items:
+            if isinstance(item, dict):
+                notes = str(item.get("notes") or "")
+                suffix = f": {notes}" if notes else ""
+                st.write(f"- {item.get('requirement', 'Requirement')}{suffix}")
 
 
 def _show_saved_packet_review(
@@ -1392,6 +1477,19 @@ def _packet_widget_key(packet_details: dict[str, object], prefix: str) -> str:
     return f"{prefix}_{safe_path or 'unknown_packet'}"
 
 
+def _evidence_requirements(score_details: dict[str, object]) -> list[str]:
+    requirements = []
+    requirements.extend(_job_requirement_list(score_details, "hard_requirements"))
+    requirements.extend(_job_requirement_list(score_details, "experience_requirements"))
+    return _dedupe(requirements)
+
+
+def _requirement_slug(value: object) -> str:
+    text = str(value or "").strip().lower()
+    slug = "".join(character if character.isalnum() else "-" for character in text)
+    return "-".join(part for part in slug.split("-") if part) or "requirement"
+
+
 def _score_analysis_key(score_details: dict[str, object]) -> tuple[object, ...]:
     metadata = score_details.get("job_metadata")
     if not isinstance(metadata, dict):
@@ -1424,6 +1522,14 @@ def _job_requirement_list(score_details: dict[str, object], key: str) -> list[st
     if not isinstance(values, list):
         return []
     return [str(value) for value in values if str(value).strip()]
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    deduped = []
+    for value in values:
+        if value not in deduped:
+            deduped.append(value)
+    return deduped
 
 
 if __name__ == "__main__":

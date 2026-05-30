@@ -22,6 +22,7 @@ PROFILE_THEMES = {
 def generate_application_packet(
     score_result: dict[str, object],
     profile_text: str | None = None,
+    evidence_answers: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Return reviewable, deterministic application guidance for a scored job."""
     metadata = _get_metadata(score_result)
@@ -52,6 +53,18 @@ def generate_application_packet(
         profile_text,
     )
     display_requirements_to_verify = _display_requirements(requirements_to_verify)
+    evidence_summary = _build_evidence_summary(
+        requirements_to_verify,
+        display_requirements_to_verify,
+        evidence_answers,
+    )
+    decision_summary = _build_decision_summary(
+        score,
+        recommendation,
+        display_requirements_to_verify,
+        evidence_summary,
+    )
+    missing_proof_actions = _build_missing_proof_actions(evidence_summary)
     gaps_to_review = _gaps_to_review(
         missing_keywords,
         concerns,
@@ -89,6 +102,9 @@ def generate_application_packet(
             display_requirements_to_verify,
             stretch_warning,
         ),
+        "decision_summary": decision_summary,
+        "evidence_summary": evidence_summary,
+        "missing_proof_actions": missing_proof_actions,
         "resume_strategy_sections": resume_strategy_sections,
         "resume_bullet_suggestions": _build_resume_bullet_suggestions(
             strongest_matches,
@@ -109,6 +125,17 @@ def generate_application_packet(
             profile_themes,
             recommendation,
             source_text,
+        ),
+        "tailored_resume_draft": _build_tailored_resume_draft(
+            display_role_label,
+            company_label,
+            metadata,
+            score,
+            decision_summary,
+            resume_strategy_sections,
+            evidence_summary,
+            missing_proof_actions,
+            profile_text,
         ),
         "recruiter_message": _build_recruiter_message(
             display_role_label,
@@ -346,6 +373,147 @@ def _build_resume_strategy_sections(
         "apply_only_if": _build_apply_only_if_items(requirements_to_verify),
         "consider_skipping_if": _build_consider_skipping_items(requirements_to_verify),
     }
+
+
+def _build_evidence_summary(
+    raw_requirements: list[str],
+    display_requirements: list[str],
+    evidence_answers: dict[str, object] | None,
+) -> dict[str, list[dict[str, str]]]:
+    answers = evidence_answers if isinstance(evidence_answers, dict) else {}
+    summary = {
+        "supported_evidence": [],
+        "partial_evidence": [],
+        "missing_proof": [],
+        "needs_verification": [],
+    }
+    raw_by_display = _raw_requirements_by_display(raw_requirements)
+    for display_requirement in display_requirements:
+        raw_requirement = raw_by_display.get(display_requirement, display_requirement)
+        answer = _evidence_answer_for(answers, raw_requirement, display_requirement)
+        item = {
+            "requirement": display_requirement,
+            "status": answer["status"],
+            "notes": answer["notes"],
+        }
+        if answer["status"] == "Strong evidence":
+            summary["supported_evidence"].append(item)
+        elif answer["status"] == "Some evidence":
+            summary["partial_evidence"].append(item)
+        elif answer["status"] == "No evidence":
+            summary["missing_proof"].append(item)
+        else:
+            summary["needs_verification"].append(item)
+    return summary
+
+
+def _raw_requirements_by_display(raw_requirements: list[str]) -> dict[str, str]:
+    mapped = {}
+    for raw_requirement in raw_requirements:
+        display_values = _display_requirements([raw_requirement])
+        display_requirement = display_values[0] if display_values else raw_requirement
+        mapped.setdefault(display_requirement, raw_requirement)
+    return mapped
+
+
+def _evidence_answer_for(
+    answers: dict[str, object],
+    raw_requirement: str,
+    display_requirement: str,
+) -> dict[str, str]:
+    for key in [raw_requirement, display_requirement, _slug_text(raw_requirement), _slug_text(display_requirement)]:
+        value = answers.get(key)
+        if isinstance(value, dict):
+            status = str(value.get("status") or "Not sure")
+            notes = str(value.get("notes") or "")
+            if status not in {"Strong evidence", "Some evidence", "No evidence", "Not sure"}:
+                status = "Not sure"
+            return {"status": status, "notes": notes}
+    return {"status": "Not sure", "notes": ""}
+
+
+def _build_decision_summary(
+    score: int,
+    recommendation: str,
+    requirements_to_verify: list[str],
+    evidence_summary: dict[str, list[dict[str, str]]],
+) -> dict[str, object]:
+    total = len(requirements_to_verify)
+    strong_count = len(evidence_summary["supported_evidence"])
+    partial_count = len(evidence_summary["partial_evidence"])
+    missing_count = len(evidence_summary["missing_proof"])
+    unsure_count = len(evidence_summary["needs_verification"])
+    supported_count = strong_count + partial_count
+
+    if recommendation == "Skip" or score < 50 or (total and missing_count >= max(2, total // 2)):
+        decision = "Skip"
+        next_action = "Skip or deprioritize unless there is a strategic reason to pursue it."
+    elif total and (missing_count + unsure_count) >= max(2, total // 2):
+        decision = "Deprioritize"
+        next_action = "Gather proof or build missing project evidence before investing heavily."
+    elif score >= 75 and (not total or supported_count >= max(1, total - 1)):
+        decision = "Strong Match"
+        next_action = "Tailor the resume using only the supported evidence."
+    else:
+        decision = "Apply Carefully"
+        next_action = "Tailor carefully and verify the unresolved requirements before applying."
+
+    why = []
+    if supported_count:
+        why.append(
+            "Supported or partial evidence exists for "
+            + _format_inline_list(
+                [item["requirement"] for item in evidence_summary["supported_evidence"] + evidence_summary["partial_evidence"]][:5],
+                "the role requirements",
+            )
+            + "."
+        )
+    if missing_count or unsure_count:
+        why.append(
+            "The biggest proof gaps are "
+            + _format_inline_list(
+                [item["requirement"] for item in evidence_summary["missing_proof"] + evidence_summary["needs_verification"]][:5],
+                "requirements that need verification",
+            )
+            + "."
+        )
+    if not why:
+        why.append("No role-specific evidence answers were provided yet.")
+
+    return {
+        "decision": decision,
+        "why": why,
+        "next_action": next_action,
+    }
+
+
+def _build_missing_proof_actions(
+    evidence_summary: dict[str, list[dict[str, str]]],
+) -> list[str]:
+    actions = []
+    for item in evidence_summary["missing_proof"] + evidence_summary["needs_verification"]:
+        requirement = item["requirement"]
+        actions.append(f"{requirement}: {_missing_proof_action(requirement)}")
+    return _dedupe(actions)
+
+
+def _missing_proof_action(requirement: str) -> str:
+    lowered = requirement.lower()
+    if "api" in lowered:
+        return "Add or highlight a project that consumes or connects to an API."
+    if "unit testing" in lowered or "test driven" in lowered or "pytest" in lowered:
+        return "Add tests to an existing project and mention unit testing only if true."
+    if "cloud" in lowered or "deployment" in lowered or "aws" in lowered:
+        return "Add deployment evidence only if a project is actually deployed."
+    if "ai agent" in lowered or "llm" in lowered or "prompt" in lowered or "rag" in lowered:
+        return "Add a small agent, assistant, prompt workflow, or automation project before applying to similar roles."
+    if "python" in lowered:
+        return "Point to a Python script, coursework project, tool, or automation example."
+    if "sql" in lowered or "data" in lowered or "database" in lowered:
+        return "Point to queries, reports, SQLite work, dashboards, or data-backed troubleshooting."
+    if ".net" in lowered or "angular" in lowered or "typescript" in lowered:
+        return "Treat this as a hard gap unless there is direct project or work evidence."
+    return "Gather a concrete resume, project, coursework, or work example before claiming this."
 
 
 def _build_supported_overlap_items(supported_overlap: list[str]) -> list[str]:
@@ -594,6 +762,137 @@ def _build_cover_letter_draft(
             ),
         ]
     )
+
+
+def _build_tailored_resume_draft(
+    role_label: str,
+    company_label: str,
+    metadata: dict[str, str],
+    score: int,
+    decision_summary: dict[str, object],
+    resume_strategy_sections: dict[str, object],
+    evidence_summary: dict[str, list[dict[str, str]]],
+    missing_proof_actions: list[str],
+    profile_text: str | None,
+) -> str:
+    supported_items = evidence_summary["supported_evidence"] + evidence_summary["partial_evidence"]
+    supported_requirements = [item["requirement"] for item in supported_items]
+    missing_requirements = [
+        item["requirement"]
+        for item in evidence_summary["missing_proof"] + evidence_summary["needs_verification"]
+    ]
+    summary_lines = _tailored_summary_lines(
+        role_label,
+        supported_requirements,
+        profile_text,
+    )
+    skills_to_emphasize = _tailored_skills_to_emphasize(
+        supported_requirements,
+        resume_strategy_sections,
+    )
+    bullets = _tailored_resume_bullets(supported_items, profile_text)
+
+    return "\n".join(
+        [
+            "# Tailored Resume Draft",
+            "",
+            "Draft only. Review carefully before using. Remove unsupported claims.",
+            "",
+            "## Target Role",
+            "",
+            f"- Role: {role_label}",
+            f"- Company: {company_label}",
+            f"- Work mode: {metadata.get('work_mode', 'Unknown')}",
+            f"- Score: {score}/100",
+            f"- Decision: {decision_summary.get('decision', 'Review')}",
+            "",
+            "## Resume Summary Draft",
+            "",
+            *[f"- {line}" for line in summary_lines],
+            "",
+            "## Skills To Emphasize",
+            "",
+            *_markdown_items(skills_to_emphasize),
+            "",
+            "## Experience / Project Bullets To Consider",
+            "",
+            "Use only if true:",
+            "",
+            *_markdown_items(bullets),
+            "",
+            "## Skills To Deprioritize Or Avoid",
+            "",
+            *_markdown_items(missing_requirements),
+            "",
+            "## Missing Proof To Resolve",
+            "",
+            *_markdown_items(missing_proof_actions),
+            "",
+            "## Review Checklist",
+            "",
+            "- Confirm every claim is true.",
+            "- Remove unsupported skills.",
+            "- Add metrics only if real.",
+            "- Align the final resume with the job posting.",
+            "",
+        ]
+    )
+
+
+def _tailored_summary_lines(
+    role_label: str,
+    supported_requirements: list[str],
+    profile_text: str | None,
+) -> list[str]:
+    lines = [
+        f"Technical candidate targeting {role_label} with emphasis on verified support, documentation, and tool-building evidence.",
+    ]
+    lowered_profile = (profile_text or "").lower()
+    if any("python" in requirement.lower() for requirement in supported_requirements):
+        lines.append("Project and coursework exposure to Python scripting and local automation tools where supported by examples.")
+    if any("api" in requirement.lower() for requirement in supported_requirements):
+        lines.append("Project exposure to REST APIs, JSON, or integrations where the resume can point to real work.")
+    if any("sql" in requirement.lower() or "data" in requirement.lower() for requirement in supported_requirements):
+        lines.append("Data-backed troubleshooting and SQL/database work where supported by reports, queries, or project data.")
+    if "documentation" in lowered_profile:
+        lines.append("Strong documentation habits, user communication, and troubleshooting follow-through.")
+    return lines[:4]
+
+
+def _tailored_skills_to_emphasize(
+    supported_requirements: list[str],
+    resume_strategy_sections: dict[str, object],
+) -> list[str]:
+    skills = []
+    for requirement in supported_requirements:
+        skills.append(requirement)
+    supported_overlap = resume_strategy_sections.get("supported_overlap")
+    if isinstance(supported_overlap, list):
+        skills.extend(str(item) for item in supported_overlap[:6])
+    return _dedupe(skills) or ["Use only skills that appear in the profile or evidence notes."]
+
+
+def _tailored_resume_bullets(
+    supported_items: list[dict[str, str]],
+    profile_text: str | None,
+) -> list[str]:
+    bullets = []
+    for item in supported_items:
+        requirement = item["requirement"]
+        notes = item["notes"]
+        if notes:
+            bullets.append(f"Connected {requirement} to verified evidence: {notes}")
+        else:
+            bullets.append(f"Emphasized {requirement} only where the resume or project notes support it.")
+    if not bullets and profile_text:
+        bullets.append("Documented technical workflows and troubleshooting steps for users or teammates.")
+    return bullets or ["Add bullets only after confirming real evidence for the role requirements."]
+
+
+def _markdown_items(values: list[str]) -> list[str]:
+    if not values:
+        return ["- None"]
+    return [f"- {value}" for value in values]
 
 
 def _build_maybe_cover_letter_note(recommendation: str, role_label: str) -> str:
@@ -1036,3 +1335,9 @@ def _format_inline_list(values: list[str], fallback: str) -> str:
     if len(values) == 1:
         return values[0]
     return ", ".join(values[:-1]) + f", and {values[-1]}"
+
+
+def _slug_text(value: str) -> str:
+    text = value.strip().lower()
+    slug = "".join(character if character.isalnum() else "-" for character in text)
+    return "-".join(part for part in slug.split("-") if part)

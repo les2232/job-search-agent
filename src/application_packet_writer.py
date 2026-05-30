@@ -10,6 +10,7 @@ PACKET_FILENAMES = {
     "job_summary": "job_summary.md",
     "score_explanation": "score_explanation.md",
     "resume_tailoring_notes": "resume_tailoring_notes.md",
+    "tailored_resume": "tailored_resume.md",
     "cover_letter_draft": "cover_letter_draft.md",
     "recruiter_message": "recruiter_message.txt",
     "application_checklist": "application_checklist.md",
@@ -57,6 +58,10 @@ def save_application_packet(
     )
     output_paths["resume_tailoring_notes"].write_text(
         _build_resume_tailoring_notes(packet),
+        encoding="utf-8",
+    )
+    output_paths["tailored_resume"].write_text(
+        str(packet.get("tailored_resume_draft", "")),
         encoding="utf-8",
     )
     output_paths["cover_letter_draft"].write_text(
@@ -223,6 +228,7 @@ def _build_structured_resume_tailoring_notes(
         [
             "# Resume Tailoring Notes",
             "",
+            _format_decision_summary(packet.get("decision_summary")),
             "## Fit Verdict",
             "",
             f"{strategy_sections.get('fit_verdict', 'Review Fit')}",
@@ -246,6 +252,7 @@ def _build_structured_resume_tailoring_notes(
                 "Major Requirements To Verify Before Applying",
                 strategy_sections.get("major_requirements_to_verify"),
             ),
+            _format_evidence_summary(packet.get("evidence_summary")),
             _format_markdown_list(
                 "Transferable Support Evidence",
                 strategy_sections.get("transferable_support_evidence"),
@@ -267,10 +274,63 @@ def _build_structured_resume_tailoring_notes(
                 "Keywords To Verify Or Avoid",
                 packet.get("keywords_to_avoid_or_verify"),
             ),
+            _format_markdown_list(
+                "Missing Proof Next Actions",
+                packet.get("missing_proof_actions"),
+            ),
             _format_markdown_list("Risk Notes", packet.get("risk_notes")),
             "",
         ]
     )
+
+
+def _format_decision_summary(value: object) -> str:
+    if not isinstance(value, dict):
+        return ""
+    why = _as_string_list(value.get("why"))
+    lines = [
+        "## Decision Summary",
+        "",
+        f"- Decision: {value.get('decision', 'Review')}",
+    ]
+    lines.extend(f"- Why: {item}" for item in why)
+    lines.append(f"- Next action: {value.get('next_action', 'Review before applying.')}")
+    return "\n".join(lines) + "\n"
+
+
+def _format_evidence_summary(value: object) -> str:
+    if not isinstance(value, dict):
+        return ""
+    sections = [
+        ("Supported Evidence", value.get("supported_evidence")),
+        ("Partial Evidence", value.get("partial_evidence")),
+        ("Missing Proof", value.get("missing_proof")),
+        ("Needs Verification", value.get("needs_verification")),
+    ]
+    parts = ["## Evidence Summary", ""]
+    for label, items in sections:
+        parts.append(f"### {label}")
+        parts.append("")
+        rows = _evidence_rows(items)
+        parts.extend(f"- {row}" for row in rows)
+        parts.append("")
+    return "\n".join(parts)
+
+
+def _evidence_rows(values: object) -> list[str]:
+    if not isinstance(values, list) or not values:
+        return ["None"]
+    rows = []
+    for value in values:
+        if not isinstance(value, dict):
+            continue
+        requirement = str(value.get("requirement", "")).strip()
+        notes = str(value.get("notes", "")).strip()
+        if notes:
+            rows.append(f"{requirement}: {notes}")
+        elif requirement:
+            rows.append(requirement)
+    return rows or ["None"]
 
 
 def _format_resume_bullets(values: object) -> str:
