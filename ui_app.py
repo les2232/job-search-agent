@@ -271,16 +271,38 @@ def _show_job_intake_mode(intake_mode: str) -> None:
         return
 
     if intake_mode == "Browser capture":
-        st.caption(
-            "Open a job posting in your browser, select the job description if possible, "
-            "click the bookmarklet, then upload the downloaded capture file here. "
-            "This does not crawl links, bypass blocked pages, or auto-apply."
+        st.info(
+            "Browser Capture lets you grab job text from a page you already have open. "
+            "It works best when you highlight the job description first."
         )
-        st.markdown("**Bookmarklet**")
-        st.code(build_browser_capture_bookmarklet(), language="javascript")
-        st.caption(
-            "Create a browser bookmark and paste this code as the URL. It captures "
-            "selected text first, otherwise visible page text, then downloads a local text file."
+        st.markdown("**One-time setup**")
+        for step in browser_capture_setup_steps():
+            st.markdown(f"- {step}")
+
+        with st.expander("How do I add the bookmark?"):
+            st.markdown("**Chrome / Edge**")
+            for step in browser_capture_chrome_edge_steps():
+                st.markdown(f"- {step}")
+            st.markdown("**Firefox**")
+            for step in browser_capture_firefox_steps():
+                st.markdown(f"- {step}")
+
+        with st.expander("Show bookmarklet code"):
+            st.caption(
+                "Copy this code, then paste it into the URL or Location field of a new browser bookmark."
+            )
+            st.code(build_browser_capture_bookmarklet(), language="javascript")
+            st.caption("Do not paste this into the address bar. Save it as the bookmark URL.")
+
+        st.markdown("**Use it on a job posting**")
+        for step in browser_capture_usage_steps():
+            st.markdown(f"- {step}")
+
+        st.caption(" ".join(browser_capture_safety_notes()))
+        st.markdown(
+            "After clicking the bookmarklet, your browser downloads "
+            "`captured-job-posting.txt`. Upload that file here, then review/edit "
+            "the imported text before analysis."
         )
         captured_file = st.file_uploader(
             "Upload bookmarklet capture",
@@ -297,7 +319,10 @@ def _show_job_intake_mode(intake_mode: str) -> None:
             else:
                 st.session_state["builder_job_text"] = captured_text
                 if len(captured_text) < MIN_CAPTURED_JOB_CHARS:
-                    st.warning("Captured text is short. Review it carefully or select more text on the job page.")
+                    st.warning(
+                        "This capture looks short. Try highlighting the job description before "
+                        "clicking the bookmarklet, then upload the new captured-job-posting.txt file."
+                    )
                 else:
                     st.success("Loaded captured text. Review and edit it below before analysis.")
 
@@ -413,6 +438,51 @@ def choose_browser_capture_text(
     if header:
         header.extend(["", "Captured Job Text:", ""])
     return clean_imported_job_text("\n".join(header) + captured)
+
+
+def browser_capture_setup_steps() -> list[str]:
+    return [
+        "Copy the bookmarklet code.",
+        'Create a browser bookmark named "Capture Job Posting."',
+        "Paste the copied code into the bookmark URL or Location field.",
+        "Do not paste the bookmarklet into the address bar.",
+    ]
+
+
+def browser_capture_chrome_edge_steps() -> list[str]:
+    return [
+        "Show the bookmarks bar if needed.",
+        "Right-click the bookmarks bar and choose Add page.",
+        'Name it "Capture Job Posting."',
+        "Paste the bookmarklet code into the URL field.",
+    ]
+
+
+def browser_capture_firefox_steps() -> list[str]:
+    return [
+        "Show the bookmarks toolbar if needed.",
+        "Right-click the toolbar and choose New Bookmark.",
+        'Name it "Capture Job Posting."',
+        "Paste the bookmarklet code into the Location field.",
+    ]
+
+
+def browser_capture_usage_steps() -> list[str]:
+    return [
+        "Open a job posting you already chose.",
+        "Highlight only the job description when possible.",
+        'Click the "Capture Job Posting" bookmark.',
+        "Upload the downloaded captured-job-posting.txt file below.",
+        "Review and edit the imported text before clicking Analyze Job.",
+    ]
+
+
+def browser_capture_safety_notes() -> list[str]:
+    return [
+        "If you do not highlight anything, the bookmarklet captures visible page text and may include extra clutter.",
+        "It does not collect cookies, local storage, passwords, or hidden fields.",
+        "It does not crawl pages or apply to jobs.",
+    ]
 
 
 def build_browser_capture_bookmarklet(max_chars: int = MAX_CAPTURED_JOB_CHARS) -> str:

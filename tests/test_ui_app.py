@@ -1,5 +1,10 @@
 from ui_app import (
     build_browser_capture_bookmarklet,
+    browser_capture_chrome_edge_steps,
+    browser_capture_firefox_steps,
+    browser_capture_safety_notes,
+    browser_capture_setup_steps,
+    browser_capture_usage_steps,
     choose_browser_capture_text,
     clean_captured_job_text,
     clean_imported_job_text,
@@ -317,6 +322,32 @@ def test_browser_capture_bookmarklet_is_local_and_selection_first() -> None:
     assert "captured-job-posting.txt" in bookmarklet
     assert "localStorage" not in bookmarklet
     assert "cookie" not in bookmarklet.lower()
+
+
+def test_browser_capture_instructions_explain_setup_and_daily_use() -> None:
+    setup_text = " ".join(browser_capture_setup_steps())
+    usage_text = " ".join(browser_capture_usage_steps())
+    browser_help = " ".join(browser_capture_chrome_edge_steps() + browser_capture_firefox_steps())
+
+    assert "Create a browser bookmark" in setup_text
+    assert "URL or Location field" in setup_text
+    assert "Do not paste the bookmarklet into the address bar" in setup_text
+    assert "Open a job posting" in usage_text
+    assert "Highlight only the job description" in usage_text
+    assert "captured-job-posting.txt" in usage_text
+    assert "URL field" in browser_help
+    assert "Location field" in browser_help
+
+
+def test_browser_capture_safety_notes_exclude_scraping_and_sensitive_storage() -> None:
+    safety_text = " ".join(browser_capture_safety_notes())
+
+    assert "visible page text" in safety_text
+    assert "cookies" in safety_text
+    assert "local storage" in safety_text
+    assert "passwords" in safety_text
+    assert "crawl pages" in safety_text
+    assert "apply to jobs" in safety_text
 
 
 def test_evidence_suggestion_helper_prefills_supported_python_api_and_sql() -> None:

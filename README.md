@@ -225,12 +225,21 @@ URL you enter and extract readable page text. Some sites block automated page
 loading, so if URL import fails, paste or upload the posting instead. The app
 does not auto-apply, and employer-facing materials still require manual review.
 
-Browser capture is optional. It captures only the page you intentionally have
-open in your browser, prefers highlighted text, and falls back to visible page
-text. The bookmarklet downloads a local text file that you upload back into the
-app for review and editing. It does not search job boards, crawl pages, bypass
-blocked content, collect cookies, or submit applications. Some pages still
-produce messy text, so review the capture before analysis.
+Browser capture is optional. It uses a bookmarklet: a small browser bookmark
+whose URL starts with `javascript:`. Set it up once by creating a bookmark named
+`Capture Job Posting` and pasting the bookmarklet code into the bookmark's URL
+or Location field. Do not paste the bookmarklet into the address bar.
+
+To use it, open a job posting you already chose, highlight the job description
+when possible, click the `Capture Job Posting` bookmark, and upload the
+downloaded `captured-job-posting.txt` file back into the app. The app then shows
+the captured text in the same review/edit box used by paste, URL import, and
+file upload. If you do not highlight anything, the bookmarklet falls back to
+visible page text, which may include extra clutter.
+
+Browser capture does not search job boards, crawl pages, bypass blocked content,
+collect cookies, read local storage, capture passwords, or submit applications.
+Some pages still produce messy text, so review the capture before analysis.
 
 Scoring rules live in `config.example.json`. You can create an ignored
 `config.local.json` to tune local scoring. The score explanation shows:
