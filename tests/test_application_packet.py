@@ -1,4 +1,8 @@
-from application_packet import REVIEW_WARNING, generate_application_packet
+from application_packet import (
+    REVIEW_WARNING,
+    _select_employer_proof_blocks,
+    generate_application_packet,
+)
 from job_scorer import extract_job_requirements
 
 
@@ -148,6 +152,42 @@ def _arrivia_score_result() -> dict[str, object]:
         },
         "job_requirements": extract_job_requirements(ARRIVIA_AI_JOB_TEXT),
         "raw_text": ARRIVIA_AI_JOB_TEXT,
+    }
+
+
+def _systems_score_result() -> dict[str, object]:
+    return {
+        "job_metadata": {
+            "title": "Systems Engineer I",
+            "company": "PlayStation Global",
+            "location": "Bellevue, WA",
+            "work_mode": "Remote",
+        },
+        "score": 80,
+        "recommendation": "Apply",
+        "matched_keywords": ["python", "sql", "apis", "automation", "data", "remote"],
+        "missing_keywords": [],
+        "concerns": [],
+        "explanation": {
+            "fit_summary": "Strong support and automation overlap.",
+            "strengths": ["Matched fit keywords: python, sql, apis, automation, data, remote"],
+            "gaps": [],
+            "concerns": ["No concern keywords or metadata issues were found."],
+            "tailoring_suggestions": ["Use project evidence."],
+        },
+        "job_requirements": {
+            "hard_requirements": [
+                "Python scripting/development",
+                "Automation workflows",
+                "API integration",
+                "SQL / data workflows",
+            ],
+            "soft_requirements": [
+                "documentation",
+                "troubleshooting",
+            ],
+            "experience_requirements": [],
+        },
     }
 
 
@@ -502,6 +542,99 @@ def test_ai_agent_cover_letter_mentions_automation_without_false_ai_claims() -> 
     assert "Arrivia, Inc.." not in cover_letter
     assert ".net" not in cover_letter_lower
     assert "angular" not in cover_letter_lower
+
+
+def test_proof_aware_cover_letter_uses_relevant_projects_without_internal_language() -> None:
+    packet = generate_application_packet(
+        _systems_score_result(),
+        PROOF_LIBRARY_PROFILE_TEXT,
+    )
+    cover_letter = packet["cover_letter_draft"]
+    cover_letter_lower = cover_letter.lower()
+
+    assert "Systems Engineer I" in cover_letter
+    assert "PlayStation Global" in cover_letter
+    assert "Job Search Automation Tool" not in cover_letter
+    assert "local-first job application packet tool" in cover_letter
+    assert "IT support assistant" in cover_letter
+    assert cover_letter.count("TradeOS / Dashboard Project") == 0
+    assert cover_letter_lower.count("data-backed problem solving") <= 1
+    for internal_phrase in [
+        "auto-suggested",
+        "use only if true",
+        "verify",
+        "draft only",
+        "cannot verify",
+        "evidence check",
+        "risk notes",
+    ]:
+        assert internal_phrase not in cover_letter_lower
+    for unsupported_claim in [
+        "production ai",
+        "professional software engineering",
+        "enterprise systems ownership",
+    ]:
+        assert unsupported_claim not in cover_letter_lower
+
+
+def test_proof_aware_recruiter_message_is_specific_and_concise() -> None:
+    packet = generate_application_packet(
+        _systems_score_result(),
+        PROOF_LIBRARY_PROFILE_TEXT,
+    )
+    message = packet["recruiter_message"]
+    message_lower = message.lower()
+
+    assert "Systems Engineer I" in message
+    assert "PlayStation Global" in message
+    assert "Streamlit job-application packet tool" in message
+    assert "Flask-based IT support assistant" in message
+    assert "overlap with python" not in message_lower
+    assert "overlap with python and sql" not in message_lower
+    assert len([part for part in message.split(".") if part.strip()]) <= 4
+    for internal_phrase in ["auto-suggested", "use only if true", "verify", "risk notes"]:
+        assert internal_phrase not in message_lower
+
+
+def test_proof_block_selection_ranks_relevant_blocks_and_excludes_irrelevant() -> None:
+    proof_blocks = [
+        {
+            "name": "Irrelevant Design Study",
+            "tools": ["Figma"],
+            "bullets": ["Explored visual layouts."],
+            "raw_text": "Figma visual layouts.",
+        },
+        {
+            "name": "Job Search Automation Tool",
+            "tools": ["Python", "Streamlit", "pytest"],
+            "bullets": ["Built workflow automation."],
+            "raw_text": "Python Streamlit pytest workflow automation.",
+        },
+        {
+            "name": "IT Support Assistant",
+            "tools": ["Python", "Flask", "SQLite", "OpenAI API", "JSON"],
+            "bullets": ["Built support workflows and retrieval logic."],
+            "raw_text": "Python Flask SQLite OpenAI API JSON support workflows.",
+        },
+    ]
+
+    selected = _select_employer_proof_blocks(
+        proof_blocks,
+        {
+            "hard_requirements": [
+                "Python scripting/development",
+                "API integration",
+                "Automation workflows",
+            ],
+            "soft_requirements": ["documentation"],
+        },
+        ["python", "apis", "automation"],
+    )
+
+    assert [block["name"] for block in selected] == [
+        "Job Search Automation Tool",
+        "IT Support Assistant",
+    ]
 
 
 def test_evidence_answers_drive_decision_summary_and_missing_proof() -> None:

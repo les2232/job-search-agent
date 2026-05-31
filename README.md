@@ -289,8 +289,10 @@ The Streamlit app shows proof blocks for the selected profile and lets local
 profiles append new private proof blocks from the UI. Proof library data should
 stay under `local_profiles/`, which is ignored by Git. These proof blocks help
 Evidence Check suggest specific project anchors and help `tailored_resume.md`
-include a `Project Evidence To Use` section. Do not include claims you cannot
-explain in an interview.
+include a `Project Evidence To Use` section. They can also make cover letters
+and recruiter messages more specific when a proof block clearly matches the
+role. Review all employer-facing text before using it, and do not include
+claims you cannot explain in an interview.
 
 Saved packets go under:
 

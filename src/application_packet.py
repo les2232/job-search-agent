@@ -83,6 +83,11 @@ def generate_application_packet(
         profile_themes,
         stretch_warning,
     )
+    employer_proof_blocks = _select_employer_proof_blocks(
+        proof_blocks,
+        job_requirements,
+        matched_keywords,
+    )
 
     return {
         "positioning_summary": _build_positioning_summary(
@@ -128,6 +133,7 @@ def generate_application_packet(
             profile_themes,
             recommendation,
             source_text,
+            employer_proof_blocks,
         ),
         "tailored_resume_draft": _build_tailored_resume_draft(
             display_role_label,
@@ -145,6 +151,7 @@ def generate_application_packet(
             display_role_label,
             company_label,
             strongest_matches,
+            employer_proof_blocks,
         ),
         "application_checklist": _build_application_checklist(recommendation),
         "risk_notes": _build_risk_notes(
@@ -730,11 +737,41 @@ def _build_cover_letter_draft(
     profile_themes: list[str],
     recommendation: str,
     source_text: str,
+    proof_blocks: list[dict[str, object]] | None = None,
 ) -> str:
     company_reason = _build_company_reason(company_label, source_text)
     role_needs = _build_role_needs_sentence(matched_keywords)
     profile_strengths = _build_profile_strengths_sentence(profile_themes)
     maybe_note = _build_maybe_cover_letter_note(recommendation, role_label)
+    proof_paragraph = _cover_letter_proof_paragraph(proof_blocks or [])
+
+    if proof_paragraph:
+        return "\n".join(
+            [
+                "Dear Hiring Team,",
+                "",
+                _sentence(
+                    f"I am interested in the {role_label} role at {company_label}"
+                )
+                + f" {company_reason}",
+                "",
+                proof_paragraph,
+                "",
+                (
+                    f"My background also includes {profile_strengths}. That experience "
+                    "has given me practice translating ambiguous user issues into clear "
+                    "troubleshooting steps, documenting recurring workflows, and supporting "
+                    "systems used by real users."
+                    f"{maybe_note}"
+                ),
+                "",
+                (
+                    "Thank you for your time and consideration. I would welcome the "
+                    f"opportunity to discuss how my technical background could support "
+                    f"{_trim_sentence_period(company_label)}."
+                ),
+            ]
+        )
 
     return "\n".join(
         [
@@ -969,6 +1006,69 @@ def _matching_proof_blocks(
         if any(_proof_block_matches_requirement(block, requirement) for requirement in requirements):
             matches.append(block)
     return matches[:4]
+
+
+def _select_employer_proof_blocks(
+    proof_blocks: list[dict[str, object]],
+    job_requirements: dict[str, object],
+    matched_keywords: list[str],
+) -> list[dict[str, object]]:
+    relevance_text = " ".join(
+        [
+            *matched_keywords,
+            *_requirement_values(job_requirements, "hard_requirements"),
+            *_requirement_values(job_requirements, "soft_requirements"),
+            *_requirement_values(job_requirements, "experience_requirements"),
+        ]
+    ).lower()
+    if not relevance_text.strip():
+        return []
+
+    scored_blocks = []
+    for index, block in enumerate(proof_blocks):
+        score = _proof_block_employer_score(block, relevance_text)
+        if score:
+            scored_blocks.append((score, -index, block))
+    scored_blocks.sort(reverse=True, key=lambda item: (item[0], item[1]))
+    return [block for _score, _index, block in scored_blocks[:2]]
+
+
+def _proof_block_employer_score(
+    proof_block: dict[str, object],
+    relevance_text: str,
+) -> int:
+    block_text = _proof_block_search_text(proof_block)
+    marker_groups = [
+        (["python"], 4),
+        (["api", "apis", "json"], 3),
+        (["sql", "sqlite", "pandas", "dashboard", "report", "logs", "data"], 3),
+        (["automation", "workflow", "packet generation", "cli"], 3),
+        (["documentation", "knowledge base", "troubleshooting", "support"], 2),
+        (["flask", "streamlit"], 2),
+        (["pytest", "testing", "evaluation", "validation"], 2),
+        (["openai", "prompt", "assistant", "ai agent", "llm"], 2),
+    ]
+    score = 0
+    for markers, weight in marker_groups:
+        if any(marker in relevance_text for marker in markers) and any(
+            marker in block_text for marker in markers
+        ):
+            score += weight
+    name = str(proof_block.get("name", "")).lower()
+    if name == "job search automation tool" and any(
+        marker in relevance_text for marker in ["python", "automation", "workflow"]
+    ):
+        score += 10
+    if name == "it support assistant" and any(
+        marker in relevance_text
+        for marker in ["api", "apis", "support", "documentation", "troubleshooting"]
+    ):
+        score += 4
+    if name == "tradeos / dashboard project" and any(
+        marker in relevance_text for marker in ["sql", "data", "dashboard", "report"]
+    ):
+        score += 2
+    return score
 
 
 def _proof_block_matches_requirement(
@@ -1207,6 +1307,72 @@ def _trim_sentence_period(value: str) -> str:
     return value.rstrip(".!?")
 
 
+def _cover_letter_proof_paragraph(
+    proof_blocks: list[dict[str, object]],
+) -> str:
+    if not proof_blocks:
+        return ""
+
+    descriptions = [
+        _cover_project_description(block)
+        for block in proof_blocks[:2]
+    ]
+    descriptions = [description for description in descriptions if description]
+    if not descriptions:
+        return ""
+    if len(descriptions) == 1:
+        return (
+            "In a recent project, "
+            + descriptions[0]
+            + " This reflects the kind of practical systems thinking, documentation, "
+            "and workflow improvement I would bring to the role."
+        )
+    return (
+        "In recent projects, "
+        + descriptions[0]
+        + " I also "
+        + _lowercase_first(descriptions[1])
+        + " These projects reflect the kind of practical systems thinking, "
+        "documentation, and workflow improvement I would bring to the role."
+    )
+
+
+def _cover_project_description(proof_block: dict[str, object]) -> str:
+    name = str(proof_block.get("name", "")).strip()
+    text = _proof_block_search_text(proof_block)
+    if name == "Job Search Automation Tool":
+        return (
+            "I built a local-first job application packet tool using Python and "
+            "Streamlit to parse job postings, map role requirements to candidate "
+            "materials, and generate reviewable application packets."
+        )
+    if name == "IT Support Assistant":
+        return (
+            "developed a Flask-based IT support assistant that uses local knowledge "
+            "base retrieval, SQLite logging, structured troubleshooting flows, and "
+            "evaluation scripts."
+        )
+    if name == "TradeOS / Dashboard Project":
+        return (
+            "built Streamlit dashboard and reporting tools using Python, Pandas, "
+            "SQLite/event logging, and API-connected project workflows."
+        )
+    if name and "python" in text:
+        return (
+            f"worked on {name}, a Python-based project involving practical tooling, "
+            "documentation, and workflow improvement."
+        )
+    if name:
+        return f"worked on {name}, focusing on practical technical problem solving and documentation."
+    return ""
+
+
+def _lowercase_first(value: str) -> str:
+    if not value:
+        return value
+    return value[0].lower() + value[1:]
+
+
 def _build_role_needs_sentence(matched_keywords: list[str]) -> str:
     needs = _human_role_needs(matched_keywords)
     if not needs:
@@ -1216,7 +1382,7 @@ def _build_role_needs_sentence(matched_keywords: list[str]) -> str:
         )
     return (
         "That experience connects with the role's emphasis on "
-        + _format_inline_list(needs[:4], "dependable technical work")
+        + _format_inline_list(needs[:5], "dependable technical work")
         + "."
     )
 
@@ -1224,7 +1390,7 @@ def _build_role_needs_sentence(matched_keywords: list[str]) -> str:
 def _human_role_needs(matched_keywords: list[str]) -> list[str]:
     keyword_map = {
         "python": "Python scripting",
-        "sql": "database-backed systems and data-backed problem solving",
+        "sql": "database-backed systems",
         "git": "version control",
         "apis": "API integrations",
         "api": "API integrations",
@@ -1265,13 +1431,42 @@ def _build_recruiter_message(
     role_label: str,
     company_label: str,
     strongest_matches: list[str],
+    proof_blocks: list[dict[str, object]] | None = None,
 ) -> str:
+    proof_summary = _recruiter_proof_summary(proof_blocks or [])
+    if proof_summary:
+        return (
+            f"Hi, I am interested in {role_label} at {company_label}. "
+            f"My background combines IT support with {proof_summary}. "
+            "I would appreciate the chance to learn more about the role and how "
+            f"my support and automation experience could fit the team."
+        )
+
     match_text = _format_inline_list(strongest_matches[:2], "technical support")
     return (
         f"Hi, I am interested in {role_label} at {company_label}. My background "
         f"includes IT support, troubleshooting, documentation, and overlap with "
         f"{match_text}. I would appreciate the chance to learn more about the role."
     )
+
+
+def _recruiter_proof_summary(proof_blocks: list[dict[str, object]]) -> str:
+    descriptions = []
+    for block in proof_blocks[:2]:
+        name = str(block.get("name", "")).strip()
+        if name == "Job Search Automation Tool":
+            descriptions.append("a Streamlit job-application packet tool")
+        elif name == "IT Support Assistant":
+            descriptions.append(
+                "a Flask-based IT support assistant using SQLite logging and structured troubleshooting flows"
+            )
+        elif name == "TradeOS / Dashboard Project":
+            descriptions.append(
+                "Streamlit dashboard/reporting tools using Python, Pandas, and API workflow concepts"
+            )
+        elif name:
+            descriptions.append(name)
+    return _format_inline_list(descriptions, "")
 
 
 def _build_application_checklist(recommendation: str) -> list[str]:
