@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import sys
 from urllib.error import URLError
+from urllib.parse import quote
 from urllib.parse import urlparse
 from urllib.request import Request
 from urllib.request import urlopen
@@ -33,6 +34,7 @@ from application_packet_reader import (
 )
 from application_packet_writer import save_application_packet
 from job_parser import parse_job_text
+from job_packet_agent import run_job_packet_agent
 from job_scorer import score_job
 from profile_manager import DEFAULT_PROFILE_ID
 from profile_manager import append_proof_block
@@ -202,6 +204,8 @@ def _show_guided_packet_builder(
             st.session_state.pop("builder_packet", None)
             st.session_state.pop("builder_packet_analysis_key", None)
             st.session_state.pop("builder_saved_packet", None)
+            st.session_state.pop("builder_agent_review", None)
+            st.session_state.pop("builder_agent_analysis_key", None)
 
     job = st.session_state.get("builder_job")
     score_details = st.session_state.get("builder_score_details")
@@ -275,8 +279,10 @@ def _show_job_intake_mode(intake_mode: str) -> None:
             "Browser Capture lets you grab job text from a page you already have open. "
             "It works best when you highlight the job description first."
         )
-        st.markdown("**One-time setup**")
-        for step in browser_capture_setup_steps():
+        st.markdown("**Recommended setup**")
+        st.markdown(browser_capture_bookmarklet_link_markdown())
+        st.caption("Drag **Capture Job Posting** to your bookmarks bar. You only need to do this once.")
+        for step in browser_capture_recommended_steps():
             st.markdown(f"- {step}")
 
         with st.expander("How do I add the bookmark?"):
@@ -287,10 +293,12 @@ def _show_job_intake_mode(intake_mode: str) -> None:
             for step in browser_capture_firefox_steps():
                 st.markdown(f"- {step}")
 
-        with st.expander("Show bookmarklet code"):
+        with st.expander("Manual setup / Show bookmarklet code"):
             st.caption(
                 "Copy this code, then paste it into the URL or Location field of a new browser bookmark."
             )
+            for step in browser_capture_manual_steps():
+                st.markdown(f"- {step}")
             st.code(build_browser_capture_bookmarklet(), language="javascript")
             st.caption("Do not paste this into the address bar. Save it as the bookmark URL.")
 
@@ -298,6 +306,10 @@ def _show_job_intake_mode(intake_mode: str) -> None:
         for step in browser_capture_usage_steps():
             st.markdown(f"- {step}")
 
+        st.info(
+            "Still stuck? Fast fallback: highlight the job description, press Ctrl+C, "
+            "switch to Paste text mode, and paste it into the review box."
+        )
         st.caption(" ".join(browser_capture_safety_notes()))
         st.markdown(
             "After clicking the bookmarklet, your browser downloads "
@@ -441,6 +453,21 @@ def choose_browser_capture_text(
 
 
 def browser_capture_setup_steps() -> list[str]:
+    return browser_capture_recommended_steps() + browser_capture_manual_steps()
+
+
+def browser_capture_recommended_steps() -> list[str]:
+    return [
+        "Show your bookmarks bar.",
+        'Drag the "Capture Job Posting" link to the bookmarks bar.',
+        "Open a job posting you already chose.",
+        "Highlight the job description.",
+        "Click the bookmark.",
+        "Upload captured-job-posting.txt below.",
+    ]
+
+
+def browser_capture_manual_steps() -> list[str]:
     return [
         "Copy the bookmarklet code.",
         'Create a browser bookmark named "Capture Job Posting."',
@@ -451,8 +478,9 @@ def browser_capture_setup_steps() -> list[str]:
 
 def browser_capture_chrome_edge_steps() -> list[str]:
     return [
-        "Show the bookmarks bar if needed.",
-        "Right-click the bookmarks bar and choose Add page.",
+        "Press Ctrl+Shift+B to show the bookmarks bar if needed.",
+        'Drag the "Capture Job Posting" link to the bookmarks bar.',
+        "If dragging does not work, right-click the bookmarks bar and choose Add page.",
         'Name it "Capture Job Posting."',
         "Paste the bookmarklet code into the URL field.",
     ]
@@ -460,10 +488,11 @@ def browser_capture_chrome_edge_steps() -> list[str]:
 
 def browser_capture_firefox_steps() -> list[str]:
     return [
-        "Show the bookmarks toolbar if needed.",
-        "Right-click the toolbar and choose New Bookmark.",
+        "Press Ctrl+Shift+B or enable the Bookmarks Toolbar if needed.",
+        'Drag the "Capture Job Posting" link to the toolbar.',
+        "If dragging does not work, right-click the toolbar and choose New Bookmark.",
         'Name it "Capture Job Posting."',
-        "Paste the bookmarklet code into the Location field.",
+        "Make sure the Location field contains the javascript: bookmarklet code, not the job page URL.",
     ]
 
 
@@ -483,6 +512,13 @@ def browser_capture_safety_notes() -> list[str]:
         "It does not collect cookies, local storage, passwords, or hidden fields.",
         "It does not crawl pages or apply to jobs.",
     ]
+
+
+def browser_capture_bookmarklet_link_markdown() -> str:
+    bookmarklet = build_browser_capture_bookmarklet()
+    if bookmarklet.startswith("javascript:"):
+        bookmarklet = "javascript:" + quote(bookmarklet.removeprefix("javascript:"), safe="")
+    return f"[Capture Job Posting]({bookmarklet})"
 
 
 def build_browser_capture_bookmarklet(max_chars: int = MAX_CAPTURED_JOB_CHARS) -> str:
@@ -561,6 +597,7 @@ def _show_builder_analysis(
     st.divider()
     st.header("Step 3: Review Fit")
     _show_analysis_summary(job, score_details, profile)
+    _show_job_packet_agent_review(score_details, profile)
 
     analysis_key = _score_analysis_key(score_details)
     if st.session_state.get("builder_packet_analysis_key") != analysis_key:
@@ -669,6 +706,74 @@ def _show_analysis_details(score_details: dict[str, object]) -> None:
             _job_requirement_list(score_details, "experience_requirements"),
         )
         _show_inline_list("Concerns", score_details.get("concerns"))
+
+
+def _show_job_packet_agent_review(
+    score_details: dict[str, object],
+    profile: dict[str, object],
+) -> None:
+    analysis_key = _score_analysis_key(score_details)
+    profile_id = str(profile.get("profile_id", "profile"))
+    agent_key = (analysis_key, profile_id)
+    if st.session_state.get("builder_agent_analysis_key") != agent_key:
+        job_text = str(st.session_state.get("builder_full_job_text", "")).strip()
+        if not job_text:
+            return
+        try:
+            st.session_state["builder_agent_review"] = run_job_packet_agent(
+                job_text,
+                profile,
+            )
+            st.session_state["builder_agent_analysis_key"] = agent_key
+        except ValueError as error:
+            st.session_state["builder_agent_review"] = {"warnings": [str(error)]}
+            st.session_state["builder_agent_analysis_key"] = agent_key
+
+    agent_review = st.session_state.get("builder_agent_review")
+    if not isinstance(agent_review, dict):
+        return
+
+    with st.expander("Job Packet Agent"):
+        st.caption(
+            "Deterministic review of the same local parse, score, and packet-generation workflow."
+        )
+        role_summary = agent_review.get("role_summary")
+        score_summary = agent_review.get("score_summary")
+        focus = agent_review.get("resume_focus_recommendations")
+
+        if isinstance(role_summary, dict):
+            st.markdown(
+                "**Role:** "
+                f"{role_summary.get('title', 'Unknown')} at {role_summary.get('company', 'Unknown')}"
+            )
+            st.caption(
+                f"Location: {role_summary.get('location', 'Unknown')} | "
+                f"Work mode: {role_summary.get('work_mode', 'Unknown')}"
+            )
+
+        if isinstance(score_summary, dict):
+            st.markdown(
+                "**Fit:** "
+                f"{score_summary.get('score', 'Unknown')}/100 | "
+                f"{score_summary.get('recommendation', 'Unknown')}"
+            )
+            fit_summary = str(score_summary.get("fit_summary", "")).strip()
+            if fit_summary:
+                st.write(fit_summary)
+
+        if isinstance(focus, dict):
+            cols = st.columns(2)
+            with cols[0]:
+                st.markdown("**Resume focus**")
+                _show_plain_list(focus.get("top_resume_focus_areas"))
+            with cols[1]:
+                st.markdown("**Verify before claiming**")
+                _show_plain_list(focus.get("requirements_to_verify"))
+
+        st.markdown("**Warnings**")
+        _show_plain_list(agent_review.get("warnings"))
+        st.markdown("**Next actions**")
+        _show_plain_list(agent_review.get("next_actions"))
 
 
 def _show_analysis_summary(

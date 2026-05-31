@@ -1,7 +1,10 @@
 from ui_app import (
     build_browser_capture_bookmarklet,
+    browser_capture_bookmarklet_link_markdown,
     browser_capture_chrome_edge_steps,
     browser_capture_firefox_steps,
+    browser_capture_manual_steps,
+    browser_capture_recommended_steps,
     browser_capture_safety_notes,
     browser_capture_setup_steps,
     browser_capture_usage_steps,
@@ -326,17 +329,32 @@ def test_browser_capture_bookmarklet_is_local_and_selection_first() -> None:
 
 def test_browser_capture_instructions_explain_setup_and_daily_use() -> None:
     setup_text = " ".join(browser_capture_setup_steps())
+    recommended_text = " ".join(browser_capture_recommended_steps())
+    manual_text = " ".join(browser_capture_manual_steps())
     usage_text = " ".join(browser_capture_usage_steps())
     browser_help = " ".join(browser_capture_chrome_edge_steps() + browser_capture_firefox_steps())
 
+    assert "Drag" in recommended_text
+    assert "bookmarks bar" in recommended_text
     assert "Create a browser bookmark" in setup_text
-    assert "URL or Location field" in setup_text
-    assert "Do not paste the bookmarklet into the address bar" in setup_text
+    assert "URL or Location field" in manual_text
+    assert "Do not paste the bookmarklet into the address bar" in manual_text
     assert "Open a job posting" in usage_text
     assert "Highlight only the job description" in usage_text
     assert "captured-job-posting.txt" in usage_text
+    assert "Ctrl+Shift+B" in browser_help
+    assert "If dragging does not work" in browser_help
     assert "URL field" in browser_help
     assert "Location field" in browser_help
+
+
+def test_browser_capture_bookmarklet_link_supports_drag_setup() -> None:
+    link = browser_capture_bookmarklet_link_markdown()
+
+    assert link.startswith("[Capture Job Posting](javascript:")
+    assert "captured-job-posting.txt" in link
+    assert "localStorage" not in link
+    assert "cookie" not in link.lower()
 
 
 def test_browser_capture_safety_notes_exclude_scraping_and_sensitive_storage() -> None:

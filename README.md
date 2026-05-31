@@ -226,16 +226,25 @@ loading, so if URL import fails, paste or upload the posting instead. The app
 does not auto-apply, and employer-facing materials still require manual review.
 
 Browser capture is optional. It uses a bookmarklet: a small browser bookmark
-whose URL starts with `javascript:`. Set it up once by creating a bookmark named
-`Capture Job Posting` and pasting the bookmarklet code into the bookmark's URL
-or Location field. Do not paste the bookmarklet into the address bar.
+whose URL starts with `javascript:`.
 
-To use it, open a job posting you already chose, highlight the job description
-when possible, click the `Capture Job Posting` bookmark, and upload the
-downloaded `captured-job-posting.txt` file back into the app. The app then shows
-the captured text in the same review/edit box used by paste, URL import, and
-file upload. If you do not highlight anything, the bookmarklet falls back to
-visible page text, which may include extra clutter.
+Recommended setup:
+
+1. Drag `Capture Job Posting` from the app to your bookmarks bar.
+2. Open a job posting you already chose.
+3. Highlight the job description when possible.
+4. Click the `Capture Job Posting` bookmark.
+5. Upload the downloaded `captured-job-posting.txt` file back into the app.
+
+Backup setup: copy the bookmarklet code manually, create a new bookmark named
+`Capture Job Posting`, and paste the code into the bookmark's URL or Location
+field. Do not paste the bookmarklet into the address bar. If setup is
+frustrating, use the fast fallback: highlight the job description, press
+Ctrl+C, switch to Paste text mode, and paste it into the review box.
+
+The app shows captured text in the same review/edit box used by paste, URL
+import, and file upload. If you do not highlight anything, the bookmarklet falls
+back to visible page text, which may include extra clutter.
 
 Browser capture does not search job boards, crawl pages, bypass blocked content,
 collect cookies, read local storage, capture passwords, or submit applications.
