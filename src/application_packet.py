@@ -1,5 +1,7 @@
 """Build deterministic application packet guidance from a scored job."""
 
+import re
+
 from profile_manager import parse_proof_blocks
 
 
@@ -50,16 +52,23 @@ def generate_application_packet(
         job_requirements,
         profile_text,
     )
+    supported_requirements = _supported_requirements(
+        job_requirements,
+        profile_text,
+    )
     requirements_to_verify = _requirements_to_verify(
         job_requirements,
         matched_keywords,
         profile_text,
     )
+    display_supported_requirements = _display_requirements(supported_requirements)
     display_requirements_to_verify = _display_requirements(requirements_to_verify)
     evidence_summary = _build_evidence_summary(
         requirements_to_verify,
         display_requirements_to_verify,
         evidence_answers,
+        supported_requirements,
+        display_supported_requirements,
     )
     decision_summary = _build_decision_summary(
         score,
@@ -390,6 +399,8 @@ def _build_evidence_summary(
     raw_requirements: list[str],
     display_requirements: list[str],
     evidence_answers: dict[str, object] | None,
+    supported_raw_requirements: list[str] | None = None,
+    supported_display_requirements: list[str] | None = None,
 ) -> dict[str, list[dict[str, str]]]:
     answers = evidence_answers if isinstance(evidence_answers, dict) else {}
     summary = {
@@ -398,8 +409,26 @@ def _build_evidence_summary(
         "missing_proof": [],
         "needs_verification": [],
     }
+    supported_raw_requirements = supported_raw_requirements or []
+    supported_display_requirements = supported_display_requirements or []
+    supported_by_display = _raw_requirements_by_display(supported_raw_requirements)
+    for display_requirement in supported_display_requirements:
+        raw_requirement = supported_by_display.get(display_requirement, display_requirement)
+        summary["supported_evidence"].append(
+            {
+                "requirement": display_requirement,
+                "status": "Strong evidence",
+                "notes": _covered_requirement_note(raw_requirement),
+            }
+        )
+
     raw_by_display = _raw_requirements_by_display(raw_requirements)
     for display_requirement in display_requirements:
+        if any(
+            item["requirement"] == display_requirement
+            for item in summary["supported_evidence"]
+        ):
+            continue
         raw_requirement = raw_by_display.get(display_requirement, display_requirement)
         answer = _evidence_answer_for(answers, raw_requirement, display_requirement)
         item = {
@@ -416,6 +445,15 @@ def _build_evidence_summary(
         else:
             summary["needs_verification"].append(item)
     return summary
+
+
+def _covered_requirement_note(requirement: str) -> str:
+    if _is_support_experience_requirement(requirement):
+        return (
+            "Profile-backed match: the selected profile shows enough IT support "
+            "experience to cover this support requirement."
+        )
+    return "Profile-backed match from selected local profile."
 
 
 def _raw_requirements_by_display(raw_requirements: list[str]) -> dict[str, str]:
@@ -1561,7 +1599,21 @@ def _supported_overlap(
             overlap.append(label)
     if _profile_supports(profile_text, ["sql server", "relational database"]):
         overlap.append("SQL Server / relational database")
+    for requirement in _requirement_values(job_requirements, "experience_requirements"):
+        if _profile_covers_experience_requirement(requirement, profile_text):
+            overlap.append(requirement)
     return _dedupe([item for item in overlap if _is_overlap_relevant(item, hard_requirements)])
+
+
+def _supported_requirements(
+    job_requirements: dict[str, object],
+    profile_text: str | None,
+) -> list[str]:
+    supported = []
+    for requirement in _requirement_values(job_requirements, "experience_requirements"):
+        if _profile_covers_experience_requirement(requirement, profile_text):
+            supported.append(requirement)
+    return _dedupe(supported)
 
 
 def _requirements_to_verify(
@@ -1579,7 +1631,9 @@ def _requirements_to_verify(
     for requirement in hard_requirements:
         if not _requirement_supported(requirement, matched_keywords, profile_text):
             requirements.append(requirement)
-    requirements.extend(_requirement_values(job_requirements, "experience_requirements"))
+    for requirement in _requirement_values(job_requirements, "experience_requirements"):
+        if not _profile_covers_experience_requirement(requirement, profile_text):
+            requirements.append(requirement)
     return _dedupe(requirements)
 
 
@@ -1613,8 +1667,105 @@ def _profile_supports(profile_text: str | None, markers: list[str]) -> bool:
     return any(marker.lower() in normalized for marker in markers)
 
 
+def _profile_covers_experience_requirement(
+    requirement: str,
+    profile_text: str | None,
+) -> bool:
+    if not _is_support_experience_requirement(requirement):
+        return False
+    profile_years = _profile_support_years(profile_text)
+    required_years = _required_years(requirement)
+    if required_years is None:
+        return profile_years > 0 or _profile_has_support_markers(profile_text)
+    return profile_years >= required_years
+
+
+def _required_years(requirement: str) -> int | None:
+    match = re.search(
+        r"\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\+?\s+years?\b",
+        requirement,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+    value = match.group(1).lower()
+    number_words = {
+        "one": 1,
+        "two": 2,
+        "three": 3,
+        "four": 4,
+        "five": 5,
+        "six": 6,
+        "seven": 7,
+        "eight": 8,
+        "nine": 9,
+        "ten": 10,
+    }
+    return int(value) if value.isdigit() else number_words.get(value)
+
+
+def _profile_support_years(profile_text: str | None) -> int:
+    if not profile_text:
+        return 0
+    years = []
+    year_pattern = re.compile(
+        r"\b(?P<years>\d+|one|two|three|four|five|six|seven|eight|nine|ten)"
+        r"\s*(?:\+|plus)?\s+years?\b",
+        flags=re.IGNORECASE,
+    )
+    for match in year_pattern.finditer(profile_text):
+        start = max(0, match.start() - 80)
+        end = min(len(profile_text), match.end() + 120)
+        context = profile_text[start:end]
+        if _is_support_experience_requirement(context):
+            parsed = _required_years(match.group(0))
+            if parsed is not None:
+                years.append(parsed)
+    return max(years, default=0)
+
+
+def _is_support_experience_requirement(text: str) -> bool:
+    normalized = text.lower()
+    return any(
+        marker in normalized
+        for marker in [
+            "it support",
+            "help desk",
+            "service desk",
+            "technical support",
+            "user support",
+            "end-user support",
+            "supporting end users",
+            "user-facing troubleshooting",
+            "account access",
+            "access support",
+            "endpoint support",
+            "device support",
+            "microsoft 365",
+            "m365",
+            "office 365",
+            "classroom/av",
+            "classroom av",
+            "av technology",
+            "audio-visual",
+            "documentation",
+            "knowledge base",
+            "escalation",
+            "technical operations support",
+        ]
+    )
+
+
+def _profile_has_support_markers(profile_text: str | None) -> bool:
+    if not profile_text:
+        return False
+    return _is_support_experience_requirement(profile_text)
+
+
 def _is_overlap_relevant(value: str, hard_requirements: list[str]) -> bool:
     if value in {"communication and user support", "documentation", "troubleshooting", "follow-through in support workflows", "remote collaboration"}:
+        return True
+    if _is_support_experience_requirement(value):
         return True
     if value.startswith("Python scripting/development"):
         return "Python scripting/development" in hard_requirements
@@ -1686,7 +1837,8 @@ def _display_requirements(requirements: list[str]) -> list[str]:
             "Workflow orchestration": "Workflow orchestration experience",
         }.get(requirement, requirement)
         if "years" in mapped.lower():
-            mapped = "Required years of full-stack software development experience"
+            if not _is_support_experience_requirement(mapped):
+                mapped = "Required years of full-stack software development experience"
         display_values.append(mapped)
     return _dedupe(display_values)
 

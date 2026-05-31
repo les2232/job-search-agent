@@ -133,6 +133,10 @@ python .\src\main.py --today --profile default
 Profiles keep different people's resume notes and saved application packets
 separate.
 
+Profile facts are local deterministic inputs. The app reads only the selected
+profile files on disk, then applies rule-based matching; it does not use
+ChatGPT memory, call external AI APIs, or infer hidden background facts.
+
 The committed demo profile lives at:
 
 ```text
@@ -153,12 +157,27 @@ Example `profile.json`:
 
 ```json
 {
-  "profile_id": "leslie",
-  "display_name": "Leslie",
+  "profile_id": "candidate",
+  "display_name": "Candidate",
   "target_roles": ["IT Support", "Technical Support"],
   "notes": "Private local profile."
 }
 ```
+
+Put private profile facts in `resume_base.md`, for example:
+
+```text
+# Candidate Name
+
+- N years of IT support experience.
+- Help desk, technical support, user-facing troubleshooting, account access
+  support, endpoint support, Microsoft 365 support, classroom/AV technology
+  support, documentation, escalation, and technical operations support.
+```
+
+Keep real names, employers, resumes, and personal proof details under
+`local_profiles/`; that folder is ignored by Git. The committed
+`profiles/default/` profile is generic demo/template data only.
 
 Saved application packets are profile-specific:
 
@@ -264,6 +283,10 @@ languages/frameworks, databases, cloud/devops tools, testing practices,
 architecture terms, and years-of-experience requirements. These extracted role
 requirements are used for risk notes and resume tailoring guidance, so generic
 target keywords are not treated as gaps unless the job actually asks for them.
+When a selected local profile clearly covers a support requirement, such as a
+2+ year IT support/help desk/technical support requirement covered by a profile
+showing enough years of IT support, the packet lists that requirement as
+supported evidence instead of a missing proof item.
 
 ## Application Packets
 

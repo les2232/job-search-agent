@@ -38,6 +38,25 @@ Required Skills/Experience
 - Object-oriented design patterns
 """
 
+SUPPORT_PROFILE_TEXT = """
+Candidate profile:
+- 5 years of IT support experience.
+- Help desk, technical support, user-facing troubleshooting, account access support,
+  endpoint support, Microsoft 365 support, classroom/AV technology support,
+  documentation, escalation, and similar technical operations support experience.
+"""
+
+SUPPORT_JOB_TEXT = """
+Job Title: IT Support Specialist
+Company: Example College
+Location: Remote
+
+Required:
+- 2+ years of IT support
+- Help desk or technical support experience
+- Experience supporting end users and documenting escalations
+"""
+
 PROOF_LIBRARY_PROFILE_TEXT = """
 Profile includes Python scripts, SQL reports, API experiments, automation projects,
 documentation, data troubleshooting, and IT support.
@@ -191,6 +210,31 @@ def _systems_score_result() -> dict[str, object]:
     }
 
 
+def _support_score_result(job_text: str = SUPPORT_JOB_TEXT) -> dict[str, object]:
+    return {
+        "job_metadata": {
+            "title": "IT Support Specialist",
+            "company": "Example College",
+            "location": "Remote",
+            "work_mode": "Remote",
+        },
+        "score": 82,
+        "recommendation": "Apply",
+        "matched_keywords": ["support", "documentation", "troubleshooting", "remote"],
+        "missing_keywords": [],
+        "concerns": [],
+        "explanation": {
+            "fit_summary": "Strong support overlap.",
+            "strengths": ["Matched fit keywords: support, documentation"],
+            "gaps": [],
+            "concerns": ["No concern keywords or metadata issues were found."],
+            "tailoring_suggestions": ["Use support evidence."],
+        },
+        "job_requirements": extract_job_requirements(job_text),
+        "raw_text": job_text,
+    }
+
+
 def test_generate_application_packet_high_score() -> None:
     packet = generate_application_packet(
         _score_result(85, "Apply"),
@@ -201,6 +245,60 @@ def test_generate_application_packet_high_score() -> None:
     assert packet["apply_recommendation"].startswith("Apply")
     assert any("Python" in item for item in packet["keywords_to_include_honestly"])
     assert len(packet["resume_bullet_suggestions"]) >= 3
+
+
+def test_profile_it_support_years_cover_two_year_requirement() -> None:
+    packet = generate_application_packet(
+        _support_score_result(),
+        SUPPORT_PROFILE_TEXT,
+    )
+    evidence = packet["evidence_summary"]
+    evidence_text = str(evidence)
+    review_text = " ".join(packet["keywords_to_avoid_or_verify"] + packet["risk_notes"])
+
+    assert any(
+        item["requirement"] == "2+ years IT support experience"
+        for item in evidence["supported_evidence"]
+    )
+    assert "Profile-backed match" in evidence_text
+    assert "2+ years IT support experience" not in review_text
+
+
+def test_profile_it_support_covers_help_desk_and_technical_support_wording() -> None:
+    packet = generate_application_packet(
+        _support_score_result(
+            """
+            Required:
+            - two years help desk experience
+            - minimum 2 years technical support experience
+            - experience supporting end users
+            """
+        ),
+        SUPPORT_PROFILE_TEXT,
+    )
+    supported_requirements = {
+        item["requirement"] for item in packet["evidence_summary"]["supported_evidence"]
+    }
+    needs_review = str(packet["evidence_summary"]["needs_verification"])
+
+    assert "2+ years help desk experience" in supported_requirements
+    assert "2+ years technical support experience" in supported_requirements
+    assert "end-user support experience" in supported_requirements
+    assert "help desk" not in needs_review
+    assert "technical support" not in needs_review
+
+
+def test_profile_it_support_years_do_not_cover_higher_year_requirement() -> None:
+    packet = generate_application_packet(
+        _support_score_result(
+            "Required: 7+ years of IT support and endpoint support experience."
+        ),
+        SUPPORT_PROFILE_TEXT,
+    )
+    review_text = str(packet["evidence_summary"]["needs_verification"])
+
+    assert "7+ years IT support experience" in review_text
+    assert "7+ years IT support experience" in packet["keywords_to_avoid_or_verify"]
 
 
 def test_generate_application_packet_medium_score() -> None:

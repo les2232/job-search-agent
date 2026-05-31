@@ -31,3 +31,5 @@ __pycache__/
 # Local resume drafts
 resume_*.md
 resume_*.txt
+!profiles/default/resume_base.md
+!tests/fixtures/profiles/test_profile/resume_base.md

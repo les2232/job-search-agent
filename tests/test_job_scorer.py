@@ -199,6 +199,27 @@ def test_extract_job_requirements_detects_ai_automation_requirements() -> None:
     assert "Angular 16+" not in hard_requirements
 
 
+def test_extract_job_requirements_detects_support_experience_variations() -> None:
+    requirements = extract_job_requirements(
+        """
+        Required:
+        - 2+ years of IT support
+        - two years help desk experience
+        - minimum 2 years technical support experience
+        - 1-3 years user support
+        - experience supporting end users
+        """
+    )
+
+    experience_requirements = requirements["experience_requirements"]
+
+    assert "2+ years IT support experience" in experience_requirements
+    assert "2+ years help desk experience" in experience_requirements
+    assert "2+ years technical support experience" in experience_requirements
+    assert "1+ years user-facing troubleshooting experience" in experience_requirements
+    assert "end-user support experience" in experience_requirements
+
+
 def test_score_explanation_for_ai_role_separates_overlap_and_verification() -> None:
     job = {
         "title": "AI Agent Builder",

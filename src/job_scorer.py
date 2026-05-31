@@ -149,6 +149,54 @@ SOFT_REQUIREMENT_PATTERNS = [
     ("independent work", [r"\bindependent(?:ly)?\b"]),
 ]
 
+NUMBER_WORDS = {
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+}
+
+SUPPORT_EXPERIENCE_AREAS = [
+    (
+        "IT support",
+        [
+            r"\bit support\b",
+            r"\btechnical operations support\b",
+            r"\bsimilar technical operations support\b",
+        ],
+    ),
+    ("help desk", [r"\bhelp\s*desk\b", r"\bservice\s*desk\b"]),
+    ("technical support", [r"\btechnical support\b"]),
+    (
+        "user-facing troubleshooting",
+        [
+            r"\buser[- ]facing troubleshooting\b",
+            r"\bsupporting end users\b",
+            r"\bend[- ]user support\b",
+            r"\buser support\b",
+            r"\bexperience supporting end users\b",
+        ],
+    ),
+    ("account access support", [r"\baccount access\b", r"\baccess support\b"]),
+    ("endpoint support", [r"\bendpoint support\b", r"\bdevice support\b"]),
+    (
+        "Microsoft 365 support",
+        [r"\bmicrosoft 365\b", r"\bm365\b", r"\boffice 365\b"],
+    ),
+    (
+        "classroom/AV technology support",
+        [r"\bclassroom\b.*\bav\b", r"\bav technology\b", r"\baudio[- ]visual\b"],
+    ),
+    ("documentation", [r"\bdocumentation\b", r"\bknowledge base\b"]),
+    ("escalation", [r"\bescalat(?:e|ion|ions)\b"]),
+]
+
 
 def score_job(
     job: dict[str, str],
@@ -510,18 +558,100 @@ def _matches_any_pattern(text: str, patterns: list[str]) -> bool:
 
 def _extract_experience_requirements(job_text: str) -> list[str]:
     requirements = []
-    pattern = re.compile(
-        r"(\d+)\+?\s+years?(?:\s+of)?\s+(.{0,45}?)(?:experience|development)",
+    year_pattern = re.compile(
+        r"\b(?P<years>\d+|one|two|three|four|five|six|seven|eight|nine|ten)"
+        r"\s*(?:\+|plus|[-–—]\s*(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten))?"
+        r"\s+years?\b",
         flags=re.IGNORECASE,
     )
-    for match in pattern.finditer(job_text):
-        years = match.group(1)
-        context = " ".join(match.group(2).split()).strip(" -/:")
-        if context:
-            requirements.append(f"{years}+ years {context} experience")
+    for match in year_pattern.finditer(job_text):
+        years = _numeric_years(match.group("years"))
+        if years is None:
+            continue
+        context = _experience_context(job_text, match)
+        support_area = _support_experience_area(context)
+        if support_area:
+            requirements.append(f"{years}+ years {support_area} experience")
+            continue
+        clean_context = _clean_experience_context(context)
+        if clean_context:
+            requirements.append(f"{years}+ years {clean_context}")
         else:
             requirements.append(f"{years}+ years experience")
+
+    support_only_patterns = [
+        (r"\bexperience supporting end users\b", "end-user support experience"),
+        (r"\bend[- ]user support experience\b", "end-user support experience"),
+        (r"\buser[- ]facing troubleshooting\b", "user-facing troubleshooting experience"),
+        (r"\bhelp\s*desk experience\b", "help desk experience"),
+        (r"\btechnical support experience\b", "technical support experience"),
+        (r"\bit support experience\b", "IT support experience"),
+        (r"\baccount access support\b", "account access support experience"),
+        (r"\bendpoint support\b", "endpoint support experience"),
+        (r"\bmicrosoft 365 support\b", "Microsoft 365 support experience"),
+        (r"\bclassroom\b.{0,30}\bav\b.{0,30}\bsupport\b", "classroom/AV technology support experience"),
+        (
+            r"\b(?:documentation|knowledge base)\s+(?:experience|skills?|support|responsibilit(?:y|ies))\b",
+            "documentation experience",
+        ),
+        (
+            r"\bexperience\s+(?:with|in)\s+(?:documentation|knowledge base)\b",
+            "documentation experience",
+        ),
+        (
+            r"\bescalat(?:e|ion|ions)\s+(?:experience|skills?|support|procedures?|workflows?)\b",
+            "escalation experience",
+        ),
+        (
+            r"\bexperience\s+(?:with|in)\s+escalat(?:e|ion|ions)\b",
+            "escalation experience",
+        ),
+    ]
+    for pattern, label in support_only_patterns:
+        if re.search(pattern, job_text, flags=re.IGNORECASE):
+            requirements.append(label)
     return _dedupe(requirements)
+
+
+def _numeric_years(value: str) -> int | None:
+    if value.isdigit():
+        return int(value)
+    return NUMBER_WORDS.get(value.lower())
+
+
+def _experience_context(job_text: str, match: re.Match[str]) -> str:
+    line_start = max(job_text.rfind("\n", 0, match.start()) + 1, 0)
+    line_end = job_text.find("\n", match.end())
+    if line_end == -1:
+        line_end = len(job_text)
+    line = job_text[line_start:line_end]
+    return " ".join(line.split())
+
+
+def _support_experience_area(context: str) -> str:
+    for label, patterns in SUPPORT_EXPERIENCE_AREAS:
+        if _matches_any_pattern(context, patterns):
+            return label
+    return ""
+
+
+def _clean_experience_context(context: str) -> str:
+    text = re.sub(
+        r".*?\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)"
+        r"\s*(?:\+|plus|[-–—]\s*(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten))?"
+        r"\s+years?\s*(?:of|in)?\s*",
+        "",
+        context,
+        flags=re.IGNORECASE,
+    )
+    text = re.split(r"[.;]", text, maxsplit=1)[0]
+    text = re.sub(r"^(?:with|using|related to)\s+", "", text, flags=re.IGNORECASE)
+    text = " ".join(text.split()).strip(" -/:")
+    if not text:
+        return ""
+    if re.search(r"\b(experience|development)\b", text, flags=re.IGNORECASE):
+        return text
+    return f"{text} experience"
 
 
 def _requirement_list(
