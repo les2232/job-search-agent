@@ -53,6 +53,8 @@ LOCAL_PROFILES_ROOT = PROJECT_ROOT / "local_profiles"
 STATUS_OPTIONS = ["New", "Applied", "Interview", "Rejected", "Saved", "Archived"]
 EVIDENCE_STATUS_OPTIONS = ["Not sure", "Strong evidence", "Some evidence", "No evidence"]
 MAX_IMPORTED_JOB_BYTES = 1_000_000
+MAX_CAPTURED_JOB_CHARS = 100_000
+MIN_CAPTURED_JOB_CHARS = 80
 JOB_SAMPLE_DIR = PROJECT_ROOT / "tests" / "fixtures" / "jobs"
 
 
@@ -153,7 +155,7 @@ def _show_guided_packet_builder(
 
     intake_mode = st.radio(
         "Job intake mode",
-        ["Paste text", "Import from URL", "Upload file", "Use sample job"],
+        ["Paste text", "Import from URL", "Upload file", "Use sample job", "Browser capture"],
         key="builder_intake_mode",
         horizontal=True,
     )
@@ -266,6 +268,38 @@ def _show_job_intake_mode(intake_mode: str) -> None:
             st.session_state["builder_job_text"] = clean_imported_job_text(sample_text)
             st.session_state["builder_import_url"] = ""
             st.success("Loaded sample job. Review and edit it below before analysis.")
+        return
+
+    if intake_mode == "Browser capture":
+        st.caption(
+            "Open a job posting in your browser, select the job description if possible, "
+            "click the bookmarklet, then upload the downloaded capture file here. "
+            "This does not crawl links, bypass blocked pages, or auto-apply."
+        )
+        st.markdown("**Bookmarklet**")
+        st.code(build_browser_capture_bookmarklet(), language="javascript")
+        st.caption(
+            "Create a browser bookmark and paste this code as the URL. It captures "
+            "selected text first, otherwise visible page text, then downloads a local text file."
+        )
+        captured_file = st.file_uploader(
+            "Upload bookmarklet capture",
+            type=["txt", "md", "html", "htm"],
+            key="builder_browser_capture_upload",
+        )
+        if captured_file is not None and st.button("Load Captured Text", key="builder_load_capture"):
+            try:
+                captured_text = clean_captured_job_text(
+                    extract_uploaded_job_text(captured_file.getvalue(), captured_file.name)
+                )
+            except ValueError as error:
+                st.warning(str(error))
+            else:
+                st.session_state["builder_job_text"] = captured_text
+                if len(captured_text) < MIN_CAPTURED_JOB_CHARS:
+                    st.warning("Captured text is short. Review it carefully or select more text on the job page.")
+                else:
+                    st.success("Loaded captured text. Review and edit it below before analysis.")
 
 
 def _build_guided_job_text(
@@ -347,6 +381,60 @@ def clean_imported_job_text(text: str) -> str:
     normalized = re.sub(r"\n{3,}", "\n\n", normalized)
     lines = [line.strip() for line in normalized.splitlines()]
     return "\n".join(line for line in lines if line).strip()
+
+
+def clean_captured_job_text(
+    text: str,
+    max_chars: int = MAX_CAPTURED_JOB_CHARS,
+) -> str:
+    cleaned = clean_imported_job_text(text)
+    if len(cleaned) > max_chars:
+        raise ValueError(
+            f"Captured text is too large ({len(cleaned)} characters). "
+            f"Select only the job description or use a file under {max_chars} characters."
+        )
+    return cleaned
+
+
+def choose_browser_capture_text(
+    selected_text: str,
+    body_text: str,
+    title: str = "",
+    url: str = "",
+    max_chars: int = MAX_CAPTURED_JOB_CHARS,
+) -> str:
+    captured = selected_text.strip() or body_text.strip()
+    captured = captured[:max_chars]
+    header = []
+    if title.strip():
+        header.append(f"Page Title: {title.strip()}")
+    if url.strip():
+        header.append(f"Page URL: {url.strip()}")
+    if header:
+        header.extend(["", "Captured Job Text:", ""])
+    return clean_imported_job_text("\n".join(header) + captured)
+
+
+def build_browser_capture_bookmarklet(max_chars: int = MAX_CAPTURED_JOB_CHARS) -> str:
+    script = (
+        "(()=>{"
+        f"const max={max_chars};"
+        "const sel=(window.getSelection&&window.getSelection().toString())||'';"
+        "const body=(document.body&&document.body.innerText)||'';"
+        "let text=(sel.trim()?sel:body).slice(0,max);"
+        "const out=['Page Title: '+document.title,'Page URL: '+location.href,'','Captured Job Text:','',text].join('\\n');"
+        "if(text.trim().length<80){alert('Captured text is short. Select the job description first if possible.');}"
+        "const blob=new Blob([out],{type:'text/plain'});"
+        "const a=document.createElement('a');"
+        "a.href=URL.createObjectURL(blob);"
+        "a.download='captured-job-posting.txt';"
+        "document.body.appendChild(a);"
+        "a.click();"
+        "a.remove();"
+        "setTimeout(()=>URL.revokeObjectURL(a.href),1000);"
+        "})();"
+    )
+    return "javascript:" + script
 
 
 def _sample_job_files() -> list[Path]:

@@ -217,12 +217,20 @@ posting:
 - import one explicit public job posting URL, best effort
 - upload a saved `.txt`, `.md`, `.html`, or `.htm` job post file
 - load an existing sample fixture
+- use the optional browser-capture bookmarklet
 
 Paste remains the most reliable option. URL import does not search job boards,
 crawl links, bypass logins, or scrape feeds; it only tries to fetch the exact
 URL you enter and extract readable page text. Some sites block automated page
 loading, so if URL import fails, paste or upload the posting instead. The app
 does not auto-apply, and employer-facing materials still require manual review.
+
+Browser capture is optional. It captures only the page you intentionally have
+open in your browser, prefers highlighted text, and falls back to visible page
+text. The bookmarklet downloads a local text file that you upload back into the
+app for review and editing. It does not search job boards, crawl pages, bypass
+blocked content, collect cookies, or submit applications. Some pages still
+produce messy text, so review the capture before analysis.
 
 Scoring rules live in `config.example.json`. You can create an ignored
 `config.local.json` to tune local scoring. The score explanation shows:

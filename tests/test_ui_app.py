@@ -1,4 +1,7 @@
 from ui_app import (
+    build_browser_capture_bookmarklet,
+    choose_browser_capture_text,
+    clean_captured_job_text,
     clean_imported_job_text,
     _evidence_suggestion_counts,
     _evidence_requirements,
@@ -270,6 +273,50 @@ def test_uploaded_html_and_text_are_cleaned() -> None:
 
 def test_clean_imported_job_text_collapses_whitespace() -> None:
     assert clean_imported_job_text("Line 1\r\n\r\n\r\n  Line   2  ") == "Line 1\nLine 2"
+
+
+def test_browser_capture_prefers_selected_text_over_body_text() -> None:
+    captured = choose_browser_capture_text(
+        "Selected job description with Python and SQL.",
+        "Whole page navigation noise and unrelated text.",
+        title="Example Role",
+        url="https://example.com/job",
+    )
+
+    assert "Selected job description" in captured
+    assert "Whole page navigation noise" not in captured
+    assert "Page Title: Example Role" in captured
+    assert "Page URL: https://example.com/job" in captured
+
+
+def test_browser_capture_falls_back_to_body_text_and_applies_limit() -> None:
+    captured = choose_browser_capture_text(
+        "",
+        "abcdef",
+        max_chars=3,
+    )
+
+    assert captured == "abc"
+
+
+def test_clean_captured_job_text_enforces_size_limit() -> None:
+    try:
+        clean_captured_job_text("x" * 20, max_chars=10)
+    except ValueError as error:
+        assert "too large" in str(error)
+    else:
+        raise AssertionError("Oversized capture should fail")
+
+
+def test_browser_capture_bookmarklet_is_local_and_selection_first() -> None:
+    bookmarklet = build_browser_capture_bookmarklet(max_chars=50000)
+
+    assert bookmarklet.startswith("javascript:")
+    assert "window.getSelection" in bookmarklet
+    assert "document.body.innerText" in bookmarklet
+    assert "captured-job-posting.txt" in bookmarklet
+    assert "localStorage" not in bookmarklet
+    assert "cookie" not in bookmarklet.lower()
 
 
 def test_evidence_suggestion_helper_prefills_supported_python_api_and_sql() -> None:
