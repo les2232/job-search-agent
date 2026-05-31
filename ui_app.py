@@ -56,6 +56,7 @@ def main() -> None:
         "and save it under the selected profile."
     )
 
+    st.subheader("Step 1: Choose Profile")
     selected_profile = _show_profile_selector()
     selected_applications_dir = profile_applications_dir(
         APPLICATIONS_DIR,
@@ -65,7 +66,8 @@ def main() -> None:
 
     _show_guided_packet_builder(selected_profile, selected_applications_dir)
     st.divider()
-    _show_saved_packet_review(selected_profile, selected_applications_dir, legacy_root)
+    with st.expander("Review saved packets"):
+        _show_saved_packet_review(selected_profile, selected_applications_dir, legacy_root)
     st.divider()
 
     tracked_jobs = read_tracked_jobs(JOBS_CSV_PATH)
@@ -113,19 +115,30 @@ def _show_guided_packet_builder(
     profile: dict[str, object],
     applications_dir: Path,
 ) -> None:
-    st.header("Start New Packet")
-    st.caption("Main flow: Paste -> Analyze -> Generate -> Save")
+    st.divider()
+    st.header("Step 2: Paste Job")
+    st.caption("Main flow: paste a posting, analyze fit, review evidence, generate drafts, then decide the next action.")
 
-    field_cols = st.columns(5)
-    title = field_cols[0].text_input("Job Title", key="builder_title")
-    company = field_cols[1].text_input("Company", key="builder_company")
-    location = field_cols[2].text_input("Location", key="builder_location")
-    work_mode = field_cols[3].selectbox(
-        "Work Mode",
-        ["", "Remote", "Hybrid", "On-site", "Unknown"],
-        key="builder_work_mode",
-    )
-    job_type = field_cols[4].text_input("Job Type", key="builder_job_type")
+    title = ""
+    company = ""
+    location = ""
+    work_mode = ""
+    job_type = ""
+    with st.expander("Optional clean header fields"):
+        st.caption(
+            "Use these when copied job-board text starts with boilerplate. "
+            "They are prepended as clean labels before analysis."
+        )
+        field_cols = st.columns(5)
+        title = field_cols[0].text_input("Job Title", key="builder_title")
+        company = field_cols[1].text_input("Company", key="builder_company")
+        location = field_cols[2].text_input("Location", key="builder_location")
+        work_mode = field_cols[3].selectbox(
+            "Work Mode",
+            ["", "Remote", "Hybrid", "On-site", "Unknown"],
+            key="builder_work_mode",
+        )
+        job_type = field_cols[4].text_input("Job Type", key="builder_job_type")
 
     job_text = st.text_area(
         "Paste job posting here",
@@ -136,10 +149,7 @@ def _show_guided_packet_builder(
             "use the optional fields above when the copied text starts with boilerplate."
         ),
     )
-    st.caption(
-        "Optional fields are prepended as clean labels before analysis so the parser "
-        "can prioritize them over copied job-board boilerplate."
-    )
+    st.caption("Copied Indeed/job-board postings are okay. Add clean header fields only when needed.")
 
     if st.button("Analyze Job", type="primary", key="builder_analyze"):
         full_job_text = _build_guided_job_text(
@@ -210,24 +220,9 @@ def _show_builder_analysis(
     profile: dict[str, object],
     applications_dir: Path,
 ) -> None:
-    st.subheader("Analysis")
-    meta_cols = st.columns(4)
-    meta_cols[0].metric("Title", str(job.get("title", "Unknown")))
-    meta_cols[1].metric("Company", str(job.get("company", "Unknown")))
-    meta_cols[2].metric("Location", str(job.get("location", "Unknown")))
-    meta_cols[3].metric("Work mode", str(job.get("work_mode", "Unknown")))
-
-    score_cols = st.columns(3)
-    score_cols[0].metric("Score", f"{score_details.get('score', 'Unknown')}/100")
-    score_cols[1].metric("Recommendation", str(score_details.get("recommendation", "Unknown")))
-    score_cols[2].metric(
-        "Hard requirements",
-        str(len(_job_requirement_list(score_details, "hard_requirements"))),
-    )
-
-    explanation = score_details.get("explanation")
-    if isinstance(explanation, dict):
-        st.write(str(explanation.get("fit_summary", "")))
+    st.divider()
+    st.header("Step 3: Review Fit")
+    _show_analysis_summary(job, score_details, profile)
 
     analysis_key = _score_analysis_key(score_details)
     if st.session_state.get("builder_packet_analysis_key") != analysis_key:
@@ -235,17 +230,17 @@ def _show_builder_analysis(
         st.session_state.pop("builder_packet_analysis_key", None)
         st.session_state.pop("builder_saved_packet", None)
 
-    guidance = _recommendation_guidance(score_details)
-    if guidance["tone"] == "success":
-        st.success(guidance["message"])
-    elif guidance["tone"] == "warning":
-        st.warning(guidance["message"])
-    else:
-        st.info(guidance["message"])
+    with st.expander("Detailed fit analysis"):
+        _show_analysis_details(score_details)
 
+    st.divider()
+    st.header("Step 4: Review Evidence")
     evidence_answers = _show_evidence_check(profile, score_details, analysis_key)
 
     generate_clicked = False
+    st.divider()
+    st.header("Step 5: Generate Packet")
+    st.caption("Generate reviewable drafts using the parsed job, fit analysis, profile, proof blocks, and evidence answers.")
     if _is_skip_recommendation(score_details):
         with st.expander("Generate a packet for this Skip role anyway"):
             st.caption(
@@ -274,10 +269,11 @@ def _show_builder_analysis(
 
     packet = st.session_state.get("builder_packet")
     if not isinstance(packet, dict):
-        _show_analysis_details(score_details)
+        st.info("Review the fit and evidence suggestions, then generate the packet drafts.")
         return
 
     _show_packet_preview(packet, score_details)
+    _show_next_action_section(packet, score_details)
     _show_builder_save_controls(packet, score_details, applications_dir)
 
     saved_packet = st.session_state.get("builder_saved_packet")
@@ -335,6 +331,55 @@ def _show_analysis_details(score_details: dict[str, object]) -> None:
             _job_requirement_list(score_details, "experience_requirements"),
         )
         _show_inline_list("Concerns", score_details.get("concerns"))
+
+
+def _show_analysis_summary(
+    job: dict[str, object],
+    score_details: dict[str, object],
+    profile: dict[str, object],
+) -> None:
+    title = str(job.get("title", "Unknown"))
+    company = str(job.get("company", "Unknown"))
+    recommendation = str(score_details.get("recommendation", "Unknown"))
+    score = score_details.get("score", "Unknown")
+    hard_requirement_count = len(_job_requirement_list(score_details, "hard_requirements"))
+
+    metric_cols = st.columns(4)
+    metric_cols[0].metric("Recommendation", recommendation)
+    metric_cols[1].metric("Score", f"{score}/100")
+    metric_cols[2].metric("Role", title)
+    metric_cols[3].metric("Hard requirements", str(hard_requirement_count))
+    st.caption(
+        f"{title} at {company} | Location: {job.get('location', 'Unknown')} | "
+        f"Work mode: {job.get('work_mode', 'Unknown')}"
+    )
+
+    guidance = _recommendation_guidance(score_details)
+    if guidance["tone"] == "success":
+        st.success(guidance["message"])
+    elif guidance["tone"] == "warning":
+        st.warning(guidance["message"])
+    else:
+        st.info(guidance["message"])
+
+    suggestions = _suggest_evidence_answers(profile, _evidence_requirements(score_details))
+    missing_or_review = [
+        requirement
+        for requirement, suggestion in suggestions.items()
+        if suggestion["status"] in {"Not sure", "No evidence"}
+    ]
+    proof_names = _suggested_proof_block_names(profile, score_details)
+
+    summary_cols = st.columns(3)
+    with summary_cols[0]:
+        st.markdown("**Strongest matches**")
+        _show_plain_list(_as_tuple_items(score_details.get("matched_keywords"))[:5])
+    with summary_cols[1]:
+        st.markdown("**Needs evidence review**")
+        _show_plain_list(missing_or_review[:5])
+    with summary_cols[2]:
+        st.markdown("**Suggested proof blocks**")
+        _show_plain_list(proof_names[:4])
 
 
 def _show_evidence_check(
@@ -403,6 +448,23 @@ def _show_evidence_check(
                     "notes": notes.strip(),
                 }
     return evidence_answers
+
+
+def _suggested_proof_block_names(
+    profile: dict[str, object],
+    score_details: dict[str, object],
+) -> list[str]:
+    proof_blocks = profile.get("proof_blocks")
+    if not isinstance(proof_blocks, list):
+        return []
+    requirements = _evidence_requirements(score_details)
+    names = []
+    for block in proof_blocks:
+        if any(_proof_block_matches_requirement(block, requirement.lower()) for requirement in requirements):
+            name = str(block.get("name", "")).strip()
+            if name and name not in names:
+                names.append(name)
+    return names
 
 
 def _suggest_evidence_answers(
@@ -737,6 +799,8 @@ def _show_packet_preview(
     packet: dict[str, object],
     score_details: dict[str, object],
 ) -> None:
+    st.subheader("Packet Draft Preview")
+    st.caption("These are local drafts. Review every claim before sending anything to an employer.")
     strategy = packet.get("resume_strategy_sections")
     fit_verdict = ""
     if isinstance(strategy, dict):
@@ -747,29 +811,67 @@ def _show_packet_preview(
 
     preview_tabs = st.tabs(
         [
-            "Decision Summary",
-            "Resume Strategy",
             "Tailored Resume",
             "Cover Letter",
+            "Recruiter Message",
             "Checklist",
+            "Resume Strategy",
+            "Decision Summary",
             "Score Explanation",
             "Risk Notes",
         ]
     )
     with preview_tabs[0]:
-        _show_decision_summary(packet.get("decision_summary"))
-    with preview_tabs[1]:
-        _show_resume_strategy(packet)
-    with preview_tabs[2]:
         st.markdown(str(packet.get("tailored_resume_draft", "")))
-    with preview_tabs[3]:
+    with preview_tabs[1]:
         st.text(str(packet.get("cover_letter_draft", "")))
-    with preview_tabs[4]:
+    with preview_tabs[2]:
+        st.text(str(packet.get("recruiter_message", "")))
+    with preview_tabs[3]:
         _show_plain_list(packet.get("application_checklist"))
+    with preview_tabs[4]:
+        _show_resume_strategy(packet)
     with preview_tabs[5]:
-        _show_score_explanation(score_details.get("explanation"))
+        _show_decision_summary(packet.get("decision_summary"))
     with preview_tabs[6]:
+        _show_score_explanation(score_details.get("explanation"))
+    with preview_tabs[7]:
         _show_plain_list(packet.get("risk_notes"))
+
+
+def _show_next_action_section(
+    packet: dict[str, object],
+    score_details: dict[str, object],
+) -> None:
+    st.divider()
+    st.header("Step 6: Decide Next Action")
+    recommendation = str(score_details.get("recommendation", "Unknown"))
+    decision = "Review"
+    decision_summary = packet.get("decision_summary")
+    if isinstance(decision_summary, dict):
+        decision = str(decision_summary.get("decision", "Review"))
+    st.caption(
+        f"Recommendation: {recommendation}. Decision summary: {decision}. "
+        "Use this as a working note before saving or applying."
+    )
+    next_action = st.radio(
+        "What should happen next?",
+        [
+            "Edit resume first",
+            "Apply today",
+            "Save for later",
+            "Skip/deprioritize",
+        ],
+        key="builder_next_action_choice",
+        horizontal=True,
+    )
+    next_action_notes = {
+        "Edit resume first": "Review the tailored resume draft, replace generic bullets with real examples, then decide whether to apply.",
+        "Apply today": "Use the packet as a checklist, review all claims, then submit manually outside this app.",
+        "Save for later": "Save the packet and revisit it from the saved packet review queue.",
+        "Skip/deprioritize": "Save only if you want a record; otherwise move on to a stronger posting.",
+    }
+    st.info(next_action_notes[next_action])
 
 
 def _show_decision_summary(value: object) -> None:
