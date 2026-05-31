@@ -1,8 +1,14 @@
 """Local Streamlit UI for the job search agent."""
 
 from collections import Counter
+from html.parser import HTMLParser
 from pathlib import Path
+import re
 import sys
+from urllib.error import URLError
+from urllib.parse import urlparse
+from urllib.request import Request
+from urllib.request import urlopen
 
 import streamlit as st
 
@@ -46,6 +52,8 @@ PROFILES_ROOT = PROJECT_ROOT / "profiles"
 LOCAL_PROFILES_ROOT = PROJECT_ROOT / "local_profiles"
 STATUS_OPTIONS = ["New", "Applied", "Interview", "Rejected", "Saved", "Archived"]
 EVIDENCE_STATUS_OPTIONS = ["Not sure", "Strong evidence", "Some evidence", "No evidence"]
+MAX_IMPORTED_JOB_BYTES = 1_000_000
+JOB_SAMPLE_DIR = PROJECT_ROOT / "tests" / "fixtures" / "jobs"
 
 
 def main() -> None:
@@ -116,8 +124,11 @@ def _show_guided_packet_builder(
     applications_dir: Path,
 ) -> None:
     st.divider()
-    st.header("Step 2: Paste Job")
-    st.caption("Main flow: paste a posting, analyze fit, review evidence, generate drafts, then decide the next action.")
+    st.header("Step 2: Add Job Posting")
+    st.caption(
+        "Paste a posting, import a public URL, upload a saved posting file, or use a sample. "
+        "The app only processes jobs you provide."
+    )
 
     title = ""
     company = ""
@@ -140,16 +151,27 @@ def _show_guided_packet_builder(
         )
         job_type = field_cols[4].text_input("Job Type", key="builder_job_type")
 
+    intake_mode = st.radio(
+        "Job intake mode",
+        ["Paste text", "Import from URL", "Upload file", "Use sample job"],
+        key="builder_intake_mode",
+        horizontal=True,
+    )
+    _show_job_intake_mode(intake_mode)
+
     job_text = st.text_area(
-        "Paste job posting here",
+        "Review imported job text",
         height=320,
         key="builder_job_text",
         placeholder=(
-            "Paste the full copied posting here. Indeed/job-board headers are okay; "
-            "use the optional fields above when the copied text starts with boilerplate."
+            "This is the text the app will score. Paste a posting here, or use "
+            "URL/upload/sample import above and edit the result before analysis."
         ),
     )
-    st.caption("Copied Indeed/job-board postings are okay. Add clean header fields only when needed.")
+    st.caption(
+        "Edit before analysis. Paste remains the reliable fallback when URL import "
+        "or file extraction is blocked or messy."
+    )
 
     if st.button("Analyze Job", type="primary", key="builder_analyze"):
         full_job_text = _build_guided_job_text(
@@ -173,6 +195,7 @@ def _show_guided_packet_builder(
             st.session_state["builder_job"] = job
             st.session_state["builder_score_details"] = score_details
             st.session_state["builder_full_job_text"] = full_job_text
+            st.session_state["builder_source_url"] = st.session_state.get("builder_import_url", "")
             st.session_state["builder_analysis_key"] = _score_analysis_key(score_details)
             st.session_state.pop("builder_packet", None)
             st.session_state.pop("builder_packet_analysis_key", None)
@@ -184,6 +207,65 @@ def _show_guided_packet_builder(
         _show_builder_analysis(job, score_details, profile, applications_dir)
     else:
         st.info("Paste a posting and click Analyze Job to start.")
+
+
+def _show_job_intake_mode(intake_mode: str) -> None:
+    if intake_mode == "Paste text":
+        st.info("Paste the job description below. This is the most reliable intake method.")
+        return
+
+    if intake_mode == "Import from URL":
+        st.caption(
+            "URL import works best on public job pages. Some sites block automated "
+            "extraction. If this fails, paste or upload the posting instead."
+        )
+        source_url = st.text_input(
+            "Job posting URL",
+            key="builder_import_url",
+            placeholder="https://example.com/job-posting",
+        )
+        if st.button("Import URL", key="builder_import_url_button"):
+            try:
+                imported_text = fetch_url_text(source_url)
+            except (OSError, URLError, ValueError) as error:
+                st.warning(f"Could not import that URL: {error}. Paste or upload the posting instead.")
+            else:
+                st.session_state["builder_job_text"] = imported_text
+                st.success("Imported text from URL. Review and edit it below before analysis.")
+        return
+
+    if intake_mode == "Upload file":
+        uploaded_file = st.file_uploader(
+            "Upload saved job posting",
+            type=["txt", "md", "html", "htm"],
+            key="builder_job_upload",
+        )
+        st.caption("Supported formats: .txt, .md, .html, .htm. PDF import is not included yet.")
+        if uploaded_file is not None and st.button("Use Uploaded File", key="builder_use_upload"):
+            imported_text = extract_uploaded_job_text(
+                uploaded_file.getvalue(),
+                uploaded_file.name,
+            )
+            st.session_state["builder_job_text"] = imported_text
+            st.success("Loaded uploaded file. Review and edit it below before analysis.")
+        return
+
+    if intake_mode == "Use sample job":
+        sample_jobs = _sample_job_files()
+        if not sample_jobs:
+            st.info("No sample job fixtures were found.")
+            return
+        sample_options = {path.stem.replace("_", " ").title(): path for path in sample_jobs}
+        selected_label = st.selectbox(
+            "Sample job",
+            list(sample_options),
+            key="builder_sample_job",
+        )
+        if st.button("Use Sample Job", key="builder_use_sample_job"):
+            sample_text = sample_options[selected_label].read_text(encoding="utf-8")
+            st.session_state["builder_job_text"] = clean_imported_job_text(sample_text)
+            st.session_state["builder_import_url"] = ""
+            st.success("Loaded sample job. Review and edit it below before analysis.")
 
 
 def _build_guided_job_text(
@@ -212,6 +294,104 @@ def _build_guided_job_text(
     if body:
         return "\n".join(header_lines + ["", "Full Job Description:", body])
     return "\n".join(header_lines)
+
+
+def fetch_url_text(
+    url: str,
+    opener: object | None = None,
+    timeout: int = 10,
+    max_bytes: int = MAX_IMPORTED_JOB_BYTES,
+) -> str:
+    """Fetch and extract readable text from one explicit public URL."""
+    clean_url = url.strip()
+    parsed = urlparse(clean_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("Enter a valid http or https URL")
+
+    request = Request(
+        clean_url,
+        headers={"User-Agent": "job-search-agent/1.0 (+local user import)"},
+    )
+    open_url = opener or urlopen
+    with open_url(request, timeout=timeout) as response:
+        payload = response.read(max_bytes + 1)
+        if len(payload) > max_bytes:
+            raise ValueError("Page is too large to import safely")
+        content_type = response.headers.get("Content-Type", "")
+    charset = _charset_from_content_type(content_type) or "utf-8"
+    html_or_text = payload.decode(charset, errors="replace")
+    if "html" in content_type.lower() or _looks_like_html(html_or_text):
+        return extract_readable_html_text(html_or_text)
+    return clean_imported_job_text(html_or_text)
+
+
+def extract_uploaded_job_text(content: bytes, filename: str) -> str:
+    text = content.decode("utf-8", errors="replace")
+    suffix = Path(filename).suffix.lower()
+    if suffix in {".html", ".htm"} or _looks_like_html(text):
+        return extract_readable_html_text(text)
+    return clean_imported_job_text(text)
+
+
+def extract_readable_html_text(html: str) -> str:
+    parser = _ReadableHTMLTextParser()
+    parser.feed(html)
+    parser.close()
+    return clean_imported_job_text(" ".join(parser.text_parts))
+
+
+def clean_imported_job_text(text: str) -> str:
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    normalized = re.sub(r"[ \t]+", " ", normalized)
+    normalized = re.sub(r"\n[ \t]+", "\n", normalized)
+    normalized = re.sub(r"\n{3,}", "\n\n", normalized)
+    lines = [line.strip() for line in normalized.splitlines()]
+    return "\n".join(line for line in lines if line).strip()
+
+
+def _sample_job_files() -> list[Path]:
+    if not JOB_SAMPLE_DIR.exists():
+        return []
+    return sorted(path for path in JOB_SAMPLE_DIR.glob("*.txt") if path.is_file())
+
+
+def _charset_from_content_type(content_type: str) -> str:
+    match = re.search(r"charset=([^;]+)", content_type, flags=re.IGNORECASE)
+    if not match:
+        return ""
+    return match.group(1).strip().strip('"')
+
+
+def _looks_like_html(text: str) -> bool:
+    return bool(re.search(r"<\s*(html|body|div|p|br|section|article)\b", text, re.IGNORECASE))
+
+
+class _ReadableHTMLTextParser(HTMLParser):
+    """Small readable-text extractor for user-provided public job pages."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.text_parts: list[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() in {"script", "style", "noscript", "svg"}:
+            self._skip_depth += 1
+        if tag.lower() in {"p", "br", "li", "div", "section", "article", "h1", "h2", "h3"}:
+            self.text_parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() in {"script", "style", "noscript", "svg"} and self._skip_depth:
+            self._skip_depth -= 1
+        if tag.lower() in {"p", "li", "div", "section", "article", "h1", "h2", "h3"}:
+            self.text_parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth:
+            return
+        clean_data = data.strip()
+        if clean_data:
+            self.text_parts.append(clean_data)
 
 
 def _show_builder_analysis(

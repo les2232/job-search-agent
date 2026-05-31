@@ -208,6 +208,22 @@ Then score the file with the matching private profile:
 python .\src\main.py .\local_profiles\<profile_id>\job_postings\first-job.txt --profile <profile_id> --packet
 ```
 
+## Job Intake Options
+
+In the Streamlit guided builder, Step 2 supports several ways to add a job
+posting:
+
+- paste job text directly
+- import one explicit public job posting URL, best effort
+- upload a saved `.txt`, `.md`, `.html`, or `.htm` job post file
+- load an existing sample fixture
+
+Paste remains the most reliable option. URL import does not search job boards,
+crawl links, bypass logins, or scrape feeds; it only tries to fetch the exact
+URL you enter and extract readable page text. Some sites block automated page
+loading, so if URL import fails, paste or upload the posting instead. The app
+does not auto-apply, and employer-facing materials still require manual review.
+
 Scoring rules live in `config.example.json`. You can create an ignored
 `config.local.json` to tune local scoring. The score explanation shows:
 
