@@ -60,6 +60,22 @@ MIN_CAPTURED_JOB_CHARS = 80
 JOB_SAMPLE_DIR = PROJECT_ROOT / "tests" / "fixtures" / "jobs"
 
 
+GENERIC_EXAMPLE_JOB_TEXT = """Job Title: IT Support Specialist
+Company: Example Organization
+Location: Remote
+Work Mode: Remote
+Job Type: Full-time
+
+Full Job Description:
+We are looking for an IT Support Specialist to help employees resolve technical issues, document repeatable fixes, and escalate complex problems when needed.
+
+Requirements:
+- 2+ years of IT support, help desk, or technical support experience
+- Experience supporting end users with account access, Microsoft 365, and endpoint troubleshooting
+- Clear documentation habits and careful communication
+"""
+
+
 def main() -> None:
     st.set_page_config(page_title="Application Packet Builder", layout="wide")
     st.title("Application Packet Builder")
@@ -67,6 +83,7 @@ def main() -> None:
         "Paste a job posting, review the fit, generate a local application packet, "
         "and save it under the selected profile."
     )
+    _show_welcome_section()
 
     st.subheader("Step 1: Choose Profile")
     selected_profile = _show_profile_selector()
@@ -123,6 +140,94 @@ def main() -> None:
             )
 
 
+def welcome_steps() -> list[str]:
+    return [
+        "Pick a candidate profile. Demo profiles are committed examples; private profiles live in ignored local_profiles/ folders.",
+        "Paste, upload, import, or load a sample job posting that you chose.",
+        "Analyze the posting and review the deterministic fit and evidence suggestions.",
+        "Generate a reviewable packet with resume notes, draft wording, checklist, and risks.",
+        "Review every claim manually before applying outside this app. Everything stays local.",
+    ]
+
+
+def local_profile_setup_steps(profile_id: str = "candidate") -> list[str]:
+    safe_id = profile_id.strip() or "candidate"
+    return [
+        f"Create local_profiles/{safe_id}/profile.json.",
+        f"Create local_profiles/{safe_id}/resume_base.md.",
+        "Keep real resume details, proof blocks, and saved job posting files under local_profiles/.",
+        "Do not commit local_profiles/; it is ignored by Git.",
+        "The app reads these local files directly; it does not use ChatGPT memory.",
+    ]
+
+
+def example_job_posting_text() -> str:
+    return GENERIC_EXAMPLE_JOB_TEXT
+
+
+def packet_start_here_items(packet: dict[str, object]) -> list[str]:
+    items = []
+    decision_summary = packet.get("decision_summary")
+    if isinstance(decision_summary, dict):
+        decision = str(decision_summary.get("decision", "Review")).strip()
+        next_action = str(decision_summary.get("next_action", "")).strip()
+        if decision:
+            items.append(f"Decision: {decision}.")
+        if next_action:
+            items.append(f"Next action: {next_action}")
+
+    evidence_summary = packet.get("evidence_summary")
+    if isinstance(evidence_summary, dict):
+        supported = _evidence_item_labels(evidence_summary.get("supported_evidence"))
+        partial = _evidence_item_labels(evidence_summary.get("partial_evidence"))
+        missing = _evidence_item_labels(evidence_summary.get("missing_proof"))
+        needs_review = _evidence_item_labels(evidence_summary.get("needs_verification"))
+        if supported:
+            items.append("Supported evidence: " + _format_list_preview(supported) + ".")
+        if partial:
+            items.append("Partial evidence to strengthen: " + _format_list_preview(partial) + ".")
+        if missing or needs_review:
+            review_items = missing + needs_review
+            items.append("Verify before claiming: " + _format_list_preview(review_items) + ".")
+
+    if not items:
+        items.append("Start by reviewing the packet checklist, risk notes, and tailored resume draft.")
+    items.append("Save the packet only after checking that every claim is true.")
+    return _dedupe(items)
+
+
+def _evidence_item_labels(values: object) -> list[str]:
+    if not isinstance(values, list):
+        return []
+    labels = []
+    for value in values:
+        if isinstance(value, dict):
+            requirement = str(value.get("requirement", "")).strip()
+            if requirement:
+                labels.append(requirement)
+    return labels
+
+
+def _format_list_preview(values: list[str], limit: int = 3) -> str:
+    preview = values[:limit]
+    if not preview:
+        return "none"
+    if len(values) > limit:
+        preview.append(f"{len(values) - limit} more")
+    return ", ".join(preview)
+
+
+def _show_welcome_section() -> None:
+    with st.expander("Start here: how this local app works", expanded=True):
+        st.markdown("**Simple workflow**")
+        for step in welcome_steps():
+            st.write(f"- {step}")
+        st.info(
+            "Everything stays on this computer. The app does not scrape job sites, "
+            "store credentials, call external AI APIs, or apply for jobs."
+        )
+
+
 def _show_guided_packet_builder(
     profile: dict[str, object],
     applications_dir: Path,
@@ -130,8 +235,8 @@ def _show_guided_packet_builder(
     st.divider()
     st.header("Step 2: Add Job Posting")
     st.caption(
-        "Paste a posting, import a public URL, upload a saved posting file, or use a sample. "
-        "The app only processes jobs you provide."
+        "Use a posting you already chose. Paste is the simplest path; upload, URL import, "
+        "browser capture, and samples are optional helpers. Review the text before analysis."
     )
 
     title = ""
@@ -162,6 +267,14 @@ def _show_guided_packet_builder(
         horizontal=True,
     )
     _show_job_intake_mode(intake_mode)
+
+    with st.expander("Need a safe example to try?"):
+        st.caption("This generic posting is only demo text. It is not a real job lead.")
+        st.code(example_job_posting_text(), language="text")
+        if st.button("Use Generic Example Posting", key="builder_use_generic_example"):
+            st.session_state["builder_job_text"] = example_job_posting_text()
+            st.session_state["builder_import_url"] = ""
+            st.success("Loaded generic example text. Review it below before analysis.")
 
     job_text = st.text_area(
         "Review imported job text",
@@ -217,7 +330,10 @@ def _show_guided_packet_builder(
 
 def _show_job_intake_mode(intake_mode: str) -> None:
     if intake_mode == "Paste text":
-        st.info("Paste the job description below. This is the most reliable intake method.")
+        st.info(
+            "Paste the job description into the review box below. Include the title, "
+            "company, location, requirements, and responsibilities when possible."
+        )
         return
 
     if intake_mode == "Import from URL":
@@ -647,7 +763,7 @@ def _show_builder_analysis(
         st.info("Review the fit and evidence suggestions, then generate the packet drafts.")
         return
 
-    _show_packet_preview(packet, score_details)
+    _show_packet_preview(packet, score_details, applications_dir)
     _show_next_action_section(packet, score_details)
     _show_builder_save_controls(packet, score_details, applications_dir)
 
@@ -664,6 +780,7 @@ def _show_builder_save_controls(
 ) -> None:
     existing_packets = list_saved_application_packets(applications_dir)
     duplicates = _find_duplicate_saved_packets(score_details, existing_packets)
+    st.caption(f"Packets for this profile save under: {applications_dir}")
 
     if duplicates:
         st.warning(
@@ -1241,6 +1358,7 @@ def _evidence_suggestion_counts(
 def _show_packet_preview(
     packet: dict[str, object],
     score_details: dict[str, object],
+    applications_dir: Path | None = None,
 ) -> None:
     st.subheader("Packet Draft Preview")
     st.caption("These are local drafts. Review every claim before sending anything to an employer.")
@@ -1251,6 +1369,7 @@ def _show_packet_preview(
     if fit_verdict:
         st.success(f"Fit Verdict: {fit_verdict}")
     st.info(str(packet.get("apply_recommendation", "")))
+    _show_packet_start_here(packet, applications_dir)
 
     preview_tabs = st.tabs(
         [
@@ -1315,6 +1434,18 @@ def _show_next_action_section(
         "Skip/deprioritize": "Save only if you want a record; otherwise move on to a stronger posting.",
     }
     st.info(next_action_notes[next_action])
+
+
+def _show_packet_start_here(
+    packet: dict[str, object],
+    applications_dir: Path | None = None,
+) -> None:
+    with st.container(border=True):
+        st.markdown("**Start here**")
+        for item in packet_start_here_items(packet):
+            st.write(f"- {item}")
+        if applications_dir is not None:
+            st.write(f"- Saved packet files will go under: {applications_dir}")
 
 
 def _show_decision_summary(value: object) -> None:
@@ -1960,6 +2091,15 @@ def _show_profile_selector() -> dict[str, object]:
         st.stop()
 
     st.subheader("Candidate Profile")
+    has_local_profile = any(bool(profile.get("is_local")) for profile in profiles)
+    st.caption(
+        "Demo profiles are committed examples for testing. Private local profiles "
+        "live under local_profiles/ and are ignored by Git."
+    )
+    st.caption(
+        "The app does not use ChatGPT memory. Profile facts are matched "
+        "deterministically from the selected local files."
+    )
     profile_options = {
         _format_profile_label(profile): profile
         for profile in profiles
@@ -1980,6 +2120,23 @@ def _show_profile_selector() -> dict[str, object]:
         )
     elif profile.get("is_local"):
         st.success("Using an ignored local profile.")
+    if not has_local_profile:
+        with st.expander("Create a private local profile"):
+            st.caption(
+                "The app will not create private profile data for you. Create these "
+                "files locally, then restart or rerun the app."
+            )
+            for step in local_profile_setup_steps():
+                st.write(f"- {step}")
+            st.code(
+                '{\n'
+                '  "profile_id": "candidate",\n'
+                '  "display_name": "Candidate",\n'
+                '  "target_roles": ["IT Support", "Technical Support"],\n'
+                '  "notes": "Private local profile."\n'
+                '}',
+                language="json",
+            )
     if not profile.get("resume_text"):
         st.info("This profile does not have resume_base.md text yet.")
 

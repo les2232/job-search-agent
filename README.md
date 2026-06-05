@@ -8,7 +8,24 @@ or external APIs, store credentials, or auto-apply to jobs.
 
 ## Quick Start
 
-Install developer dependencies:
+### Windows
+
+```powershell
+git clone <repo-url>
+cd job-search-agent
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m streamlit run ui_app.py
+```
+
+After the environment exists, you can also start the app with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_app.ps1
+```
+
+For CLI development and tests, install developer dependencies:
 
 ```powershell
 python -m pip install -r requirements-dev.txt
@@ -20,17 +37,33 @@ Run the sample job through the CLI:
 python .\src\main.py .\data\sample_job.txt
 ```
 
-Install the UI dependency:
+## What This App Does
+
+- scores job postings you provide
+- explains deterministic fit signals and gaps
+- generates reviewable local application packet drafts
+- keeps private profiles under ignored `local_profiles/`
+- saves packet summaries without storing the raw job description in JSON
+
+## What This App Does Not Do
+
+- scrape job sites or search job boards for you
+- store credentials or apply to jobs
+- call ChatGPT, external AI APIs, or ChatGPT memory
+- verify that every generated claim is true
+
+## Run the App on Windows
+
+From PowerShell:
 
 ```powershell
-python -m pip install -r requirements.txt
+cd C:\Users\lesco\Desktop\job-search-agent
+powershell -ExecutionPolicy Bypass -File .\scripts\run_app.ps1
 ```
 
-Run the local browser UI:
-
-```powershell
-streamlit run ui_app.py
-```
+The launcher activates `.venv` if it exists, then starts the Streamlit app.
+The app runs locally and does not scrape job sites, store credentials, call
+external AI APIs, or apply to jobs.
 
 ## Quick Smoke Test
 

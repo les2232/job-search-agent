@@ -13,17 +13,21 @@ from ui_app import (
     clean_imported_job_text,
     _evidence_suggestion_counts,
     _evidence_requirements,
+    example_job_posting_text,
     extract_readable_html_text,
     extract_uploaded_job_text,
     fetch_url_text,
     _find_duplicate_saved_packets,
     _recommendation_guidance,
     _requirement_slug,
+    local_profile_setup_steps,
+    packet_start_here_items,
     _saved_packet_table_row,
     _saved_packets_for_queue,
     _score_analysis_key,
     _suggest_evidence_answers,
     _suggest_evidence_for_requirement,
+    welcome_steps,
 )
 
 
@@ -56,6 +60,69 @@ Only emphasize these when there is direct project evidence: cloud platforms,
 Kubernetes, Docker, Angular, TypeScript-heavy frontend, .NET, C#,
 production ML engineering, advanced DevOps.
 """
+
+
+def test_welcome_steps_explain_local_reviewable_workflow() -> None:
+    text = " ".join(welcome_steps())
+
+    assert "Pick a candidate profile" in text
+    assert "Paste, upload, import, or load a sample job posting" in text
+    assert "deterministic fit" in text
+    assert "reviewable packet" in text
+    assert "Review every claim manually" in text
+    assert "Everything stays local" in text
+
+
+def test_local_profile_setup_steps_keep_private_data_ignored() -> None:
+    steps = local_profile_setup_steps("candidate")
+    text = " ".join(steps)
+
+    assert "local_profiles/candidate/profile.json" in text
+    assert "local_profiles/candidate/resume_base.md" in text
+    assert "Do not commit local_profiles" in text
+    assert "does not use ChatGPT memory" in text
+
+
+def test_example_job_posting_text_is_generic_and_support_oriented() -> None:
+    text = example_job_posting_text()
+
+    assert "Example Organization" in text
+    assert "2+ years of IT support" in text
+    assert "Microsoft 365" in text
+    assert "leslie" not in text.lower()
+    assert "password" not in text.lower()
+
+
+def test_packet_start_here_items_summarize_supported_and_review_items() -> None:
+    items = packet_start_here_items(
+        {
+            "decision_summary": {
+                "decision": "Apply Carefully",
+                "next_action": "Tailor carefully and verify unresolved requirements.",
+            },
+            "evidence_summary": {
+                "supported_evidence": [
+                    {"requirement": "2+ years IT support experience"},
+                ],
+                "partial_evidence": [
+                    {"requirement": "API integration experience"},
+                ],
+                "missing_proof": [
+                    {"requirement": "7+ years endpoint support experience"},
+                ],
+                "needs_verification": [
+                    {"requirement": "Escalation experience"},
+                ],
+            },
+        }
+    )
+    text = " ".join(items)
+
+    assert "Decision: Apply Carefully." in items
+    assert "Supported evidence: 2+ years IT support experience." in items
+    assert "Partial evidence to strengthen: API integration experience." in items
+    assert "Verify before claiming" in text
+    assert "Save the packet only after checking that every claim is true." in items
 
 
 def _score_result(
