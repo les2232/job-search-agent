@@ -88,11 +88,27 @@ role-specific guidance. It does not write real saved packets.
 
 ## Streamlit UI
 
-The UI is the easiest way to use the full workflow.
+The UI is the easiest way to use the full workflow. The main screen is a simple
+three-step flow:
 
-Choose a candidate profile at the top of the app before scoring or reviewing
-saved applications. The selected profile controls which resume/profile text is
-used for packet generation and which saved application folders are shown.
+1. Choose a profile.
+2. Paste or upload a job posting.
+3. Generate and review the application packet.
+
+The selected profile controls which resume/profile text is used for packet
+generation and which saved application folders are shown. If a private local
+profile exists, the UI prefers it by default; otherwise the committed demo
+profile is enough to try the app.
+
+For job intake, paste the posting into the large text box or upload a saved
+`.txt` or `.md` file. The app detects title, company, location, and work mode
+from the text when it can. Manual corrections are optional and hidden in an
+expander.
+
+The default action is `Generate application packet`. That one button parses the
+posting, scores the fit, suggests evidence from the selected profile, and builds
+local draft materials. Review the compact result first, then open the detailed
+drafts below it.
 
 - `Dashboard`: high-level tracker and saved-application counts.
 - `Today`: applications that are overdue, due soon, ready to apply, or missing
@@ -266,16 +282,14 @@ In the Streamlit guided builder, Step 2 supports several ways to add a job
 posting:
 
 - paste job text directly
-- import one explicit public job posting URL, best effort
-- upload a saved `.txt`, `.md`, `.html`, or `.htm` job post file
-- load an existing sample fixture
+- upload a saved `.txt` or `.md` job post file
+- load a fake example or committed sample fixture for testing
 - use the optional browser-capture bookmarklet
 
-Paste remains the most reliable option. URL import does not search job boards,
-crawl links, bypass logins, or scrape feeds; it only tries to fetch the exact
-URL you enter and extract readable page text. Some sites block automated page
-loading, so if URL import fails, paste or upload the posting instead. The app
-does not auto-apply, and employer-facing materials still require manual review.
+Paste remains the most reliable option. The main workflow does not import job
+URLs, search job boards, crawl links, bypass logins, scrape feeds, ask for job
+board credentials, or auto-apply. Employer-facing materials still require manual
+review.
 
 Browser capture is optional. It uses a bookmarklet: a small browser bookmark
 whose URL starts with `javascript:`.
@@ -294,9 +308,9 @@ field. Do not paste the bookmarklet into the address bar. If setup is
 frustrating, use the fast fallback: highlight the job description, press
 Ctrl+C, switch to Paste text mode, and paste it into the review box.
 
-The app shows captured text in the same review/edit box used by paste, URL
-import, and file upload. If you do not highlight anything, the bookmarklet falls
-back to visible page text, which may include extra clutter.
+The app shows captured text in the same review/edit box used by paste and file
+upload. If you do not highlight anything, the bookmarklet falls back to visible
+page text, which may include extra clutter.
 
 Browser capture does not search job boards, crawl pages, bypass blocked content,
 collect cookies, read local storage, capture passwords, or submit applications.
@@ -341,14 +355,12 @@ The cover letter draft is employer-facing. Internal cautions and verification
 reminders stay in the risk notes, checklist, score explanation, and resume
 tailoring notes.
 
-## Evidence Check + Tailored Resume Draft
+## Evidence Suggestions + Tailored Resume Draft
 
-The guided UI includes an evidence check after job analysis. It auto-suggests
-evidence status and notes from the selected profile's `resume_base.md`, then lets
-you correct anything that is too generous, too cautious, or incomplete. For each
-detected hard requirement, confirm whether the candidate has strong evidence,
-some evidence, no evidence, or is not sure. Add or revise short notes that point
-to real resume, project, coursework, or work examples.
+The guided UI auto-suggests evidence status and notes from the selected
+profile's `resume_base.md` when you generate a packet. These suggestions are
+review aids, not verified truth. Use the compact result to see what looks
+supported and what needs review before using any employer-facing draft.
 
 The app uses those answers to generate:
 

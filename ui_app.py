@@ -143,9 +143,8 @@ def main() -> None:
 def welcome_steps() -> list[str]:
     return [
         "Pick a candidate profile. Demo profiles are committed examples; private profiles live in ignored local_profiles/ folders.",
-        "Paste, upload, import, or load a sample job posting that you chose.",
-        "Analyze the posting and review the deterministic fit and evidence suggestions.",
-        "Generate a reviewable packet with resume notes, draft wording, checklist, and risks.",
+        "Paste, upload, or load a sample job posting that you chose.",
+        "Generate a reviewable packet with deterministic fit, evidence suggestions, resume notes, draft wording, checklist, and risks.",
         "Review every claim manually before applying outside this app. Everything stays local.",
     ]
 
@@ -235,97 +234,298 @@ def _show_guided_packet_builder(
     st.divider()
     st.header("Step 2: Add Job Posting")
     st.caption(
-        "Use a posting you already chose. Paste is the simplest path; upload, URL import, "
-        "browser capture, and samples are optional helpers. Review the text before analysis."
+        "Paste a posting or upload a saved .txt/.md file. The app only uses text "
+        "you provide on this computer."
     )
 
-    title = ""
-    company = ""
-    location = ""
-    work_mode = ""
-    job_type = ""
-    with st.expander("Optional clean header fields"):
+    uploaded_file = st.file_uploader(
+        "Upload a saved job posting",
+        type=["txt", "md"],
+        key="builder_simple_upload",
+    )
+    _load_uploaded_job_text_into_session(uploaded_file)
+
+    with st.expander("Other local intake helpers"):
         st.caption(
-            "Use these when copied job-board text starts with boilerplate. "
-            "They are prepended as clean labels before analysis."
+            "These are optional. Paste or upload is still the fastest path. "
+            "The app does not scrape job sites, ask for credentials, or apply to jobs."
         )
-        field_cols = st.columns(5)
-        title = field_cols[0].text_input("Job Title", key="builder_title")
-        company = field_cols[1].text_input("Company", key="builder_company")
-        location = field_cols[2].text_input("Location", key="builder_location")
-        work_mode = field_cols[3].selectbox(
-            "Work Mode",
-            ["", "Remote", "Hybrid", "On-site", "Unknown"],
-            key="builder_work_mode",
+        helper_mode = st.radio(
+            "Helper",
+            ["Safe example", "Sample fixture", "Clipboard help", "Browser capture"],
+            key="builder_helper_mode",
+            horizontal=True,
         )
-        job_type = field_cols[4].text_input("Job Type", key="builder_job_type")
-
-    intake_mode = st.radio(
-        "Job intake mode",
-        ["Paste text", "Import from URL", "Upload file", "Use sample job", "Browser capture"],
-        key="builder_intake_mode",
-        horizontal=True,
-    )
-    _show_job_intake_mode(intake_mode)
-
-    with st.expander("Need a safe example to try?"):
-        st.caption("This generic posting is only demo text. It is not a real job lead.")
-        st.code(example_job_posting_text(), language="text")
-        if st.button("Use Generic Example Posting", key="builder_use_generic_example"):
-            st.session_state["builder_job_text"] = example_job_posting_text()
-            st.session_state["builder_import_url"] = ""
-            st.success("Loaded generic example text. Review it below before analysis.")
+        _show_local_intake_helper(helper_mode)
 
     job_text = st.text_area(
-        "Review imported job text",
-        height=320,
+        "Job posting text",
+        height=360,
         key="builder_job_text",
         placeholder=(
-            "This is the text the app will score. Paste a posting here, or use "
-            "URL/upload/sample import above and edit the result before analysis."
+            "Paste the full job posting here. Include the title, company, location, "
+            "requirements, responsibilities, and benefits if they are available."
         ),
     )
     st.caption(
-        "Edit before analysis. Paste remains the reliable fallback when URL import "
-        "or file extraction is blocked or messy."
+        "Keep only the posting text you want reviewed. Copied navigation or ads can be deleted."
     )
 
-    if st.button("Analyze Job", type="primary", key="builder_analyze"):
+    detected_job = parse_job_text(job_text) if job_text.strip() else None
+    detail_overrides = _show_detected_job_details(detected_job)
+
+    st.divider()
+    st.header("Step 3: Generate and Review Packet")
+    st.caption(
+        "One click parses the job, scores the fit, suggests evidence from the selected "
+        "profile, and builds local drafts for review."
+    )
+    generate_clicked = st.button(
+        "Generate application packet",
+        type="primary",
+        key="builder_generate_application_packet",
+    )
+
+    if generate_clicked:
         full_job_text = _build_guided_job_text(
             job_text,
-            title=title,
-            company=company,
-            location=location,
-            work_mode=work_mode,
-            job_type=job_type,
+            title=detail_overrides.get("title", ""),
+            company=detail_overrides.get("company", ""),
+            location=detail_overrides.get("location", ""),
+            work_mode=detail_overrides.get("work_mode", ""),
         )
         if not full_job_text.strip():
-            st.error("Paste a job posting before analyzing.")
+            st.error("Paste or upload a job posting before generating a packet.")
         else:
             job = parse_job_text(
                 full_job_text,
-                title=title,
-                company=company,
-                location=location,
+                title=detail_overrides.get("title", ""),
+                company=detail_overrides.get("company", ""),
+                location=detail_overrides.get("location", ""),
             )
             score_details = score_job(job)
+            evidence_answers = _suggest_evidence_answers(
+                profile,
+                _evidence_requirements(score_details),
+            )
+            packet = generate_application_packet(
+                score_details,
+                profile.get("resume_text"),
+                evidence_answers=evidence_answers,
+            )
             st.session_state["builder_job"] = job
             st.session_state["builder_score_details"] = score_details
             st.session_state["builder_full_job_text"] = full_job_text
-            st.session_state["builder_source_url"] = st.session_state.get("builder_import_url", "")
             st.session_state["builder_analysis_key"] = _score_analysis_key(score_details)
-            st.session_state.pop("builder_packet", None)
-            st.session_state.pop("builder_packet_analysis_key", None)
+            st.session_state["builder_evidence_answers"] = evidence_answers
+            st.session_state["builder_packet"] = packet
+            st.session_state["builder_packet_analysis_key"] = _score_analysis_key(score_details)
             st.session_state.pop("builder_saved_packet", None)
             st.session_state.pop("builder_agent_review", None)
             st.session_state.pop("builder_agent_analysis_key", None)
 
     job = st.session_state.get("builder_job")
     score_details = st.session_state.get("builder_score_details")
-    if isinstance(job, dict) and isinstance(score_details, dict):
-        _show_builder_analysis(job, score_details, profile, applications_dir)
+    packet = st.session_state.get("builder_packet")
+    if isinstance(job, dict) and isinstance(score_details, dict) and isinstance(packet, dict):
+        _show_generated_packet_result(job, score_details, packet, applications_dir)
     else:
-        st.info("Paste a posting and click Analyze Job to start.")
+        st.info("Paste or upload a posting, check the detected details, then generate the packet.")
+
+
+def _load_uploaded_job_text_into_session(uploaded_file: object | None) -> None:
+    if uploaded_file is None:
+        return
+    name = str(getattr(uploaded_file, "name", "job-posting.txt"))
+    payload = uploaded_file.getvalue()
+    upload_key = f"{name}:{len(payload)}"
+    if st.session_state.get("builder_uploaded_job_key") == upload_key:
+        return
+    st.session_state["builder_job_text"] = job_text_from_upload_bytes(payload, name)
+    st.session_state["builder_uploaded_job_key"] = upload_key
+    st.success("Loaded uploaded job text. Review it below before generating.")
+    st.rerun()
+
+
+def job_text_from_upload_bytes(payload: bytes, filename: str) -> str:
+    suffix = Path(filename).suffix.lower()
+    if suffix not in {".txt", ".md"}:
+        raise ValueError("Upload a .txt or .md job posting file.")
+    return extract_uploaded_job_text(payload, filename)
+
+
+def _show_local_intake_helper(helper_mode: str) -> None:
+    if helper_mode == "Safe example":
+        st.caption("This generic posting is fake demo text. It is not a real job lead.")
+        st.code(example_job_posting_text(), language="text")
+        if st.button("Use generic example", key="builder_use_generic_example"):
+            st.session_state["builder_job_text"] = example_job_posting_text()
+            st.success("Loaded generic example text. Review it below before generating.")
+        return
+
+    if helper_mode == "Sample fixture":
+        sample_jobs = _sample_job_files()
+        if not sample_jobs:
+            st.info("No sample job fixtures were found.")
+            return
+        sample_options = {path.stem.replace("_", " ").title(): path for path in sample_jobs}
+        selected_label = st.selectbox(
+            "Sample job",
+            list(sample_options),
+            key="builder_sample_job",
+        )
+        if st.button("Use sample fixture", key="builder_use_sample_job"):
+            sample_text = sample_options[selected_label].read_text(encoding="utf-8")
+            st.session_state["builder_job_text"] = clean_imported_job_text(sample_text)
+            st.success("Loaded sample job. Review it below before generating.")
+        return
+
+    if helper_mode == "Clipboard help":
+        st.info(
+            "For privacy, this local Python app does not read your clipboard directly. "
+            "Click in the job text box and press Ctrl+V to paste."
+        )
+        return
+
+    if helper_mode == "Browser capture":
+        _show_browser_capture_helper()
+
+
+def _show_browser_capture_helper() -> None:
+    _show_job_intake_mode("Browser capture")
+
+
+def _show_detected_job_details(job: dict[str, object] | None) -> dict[str, str]:
+    if not isinstance(job, dict):
+        st.info("Detected job details will appear here after you paste or upload text.")
+        return {}
+
+    st.markdown("**Detected details**")
+    detail_cols = st.columns(4)
+    detail_cols[0].metric("Title", str(job.get("title", "Unknown")))
+    detail_cols[1].metric("Company", str(job.get("company", "Unknown")))
+    detail_cols[2].metric("Location", str(job.get("location", "Unknown")))
+    detail_cols[3].metric("Work mode", str(job.get("work_mode", "Unknown")))
+
+    with st.expander("Edit detected details"):
+        st.caption("Only change these if the automatic detection is wrong or missing.")
+        field_cols = st.columns(4)
+        title = field_cols[0].text_input(
+            "Job title",
+            value=_editable_detected_value(job.get("title")),
+            key="builder_title",
+        )
+        company = field_cols[1].text_input(
+            "Company",
+            value=_editable_detected_value(job.get("company")),
+            key="builder_company",
+        )
+        location = field_cols[2].text_input(
+            "Location",
+            value=_editable_detected_value(job.get("location")),
+            key="builder_location",
+        )
+        detected_work_mode = _editable_detected_value(job.get("work_mode"))
+        work_modes = ["", "Remote", "Hybrid", "On-site", "Unknown"]
+        work_mode = field_cols[3].selectbox(
+            "Work mode",
+            work_modes,
+            index=work_modes.index(detected_work_mode) if detected_work_mode in work_modes else 0,
+            key="builder_work_mode",
+        )
+    return {
+        "title": title,
+        "company": company,
+        "location": location,
+        "work_mode": work_mode,
+    }
+
+
+def _editable_detected_value(value: object) -> str:
+    text = str(value or "").strip()
+    if not text or text.lower() == "unknown":
+        return ""
+    return text
+
+
+def _show_generated_packet_result(
+    job: dict[str, object],
+    score_details: dict[str, object],
+    packet: dict[str, object],
+    applications_dir: Path,
+) -> None:
+    saved_packet = st.session_state.get("builder_saved_packet")
+    _show_compact_packet_result(job, score_details, packet, applications_dir, saved_packet)
+    _show_builder_save_controls(packet, score_details, applications_dir)
+    saved_packet = st.session_state.get("builder_saved_packet")
+    if isinstance(saved_packet, dict):
+        st.success(f"Saved packet: {saved_packet['folder_path']}")
+    with st.expander("Fit and evidence details"):
+        _show_analysis_summary(job, score_details, {"proof_blocks": []})
+        _show_analysis_details(score_details)
+    _show_packet_preview(packet, score_details, applications_dir)
+
+
+def _show_compact_packet_result(
+    job: dict[str, object],
+    score_details: dict[str, object],
+    packet: dict[str, object],
+    applications_dir: Path,
+    saved_packet: object,
+) -> None:
+    st.subheader("Packet result")
+    metric_cols = st.columns(4)
+    metric_cols[0].metric("Score", f"{score_details.get('score', 'Unknown')}/100")
+    metric_cols[1].metric("Recommendation", str(score_details.get("recommendation", "Unknown")))
+    metric_cols[2].metric("Role", str(job.get("title", "Unknown")))
+    metric_cols[3].metric("Company", str(job.get("company", "Unknown")))
+
+    result_cols = st.columns(3)
+    with result_cols[0]:
+        st.markdown("**Top supported evidence**")
+        _show_plain_list(top_packet_supported_items(packet))
+    with result_cols[1]:
+        st.markdown("**Top review items**")
+        _show_plain_list(top_packet_review_items(packet))
+    with result_cols[2]:
+        st.markdown("**Next 3 actions**")
+        _show_plain_list(packet_next_actions(packet))
+
+    if isinstance(saved_packet, dict):
+        st.success(f"Saved packet location: {saved_packet['folder_path']}")
+    else:
+        st.caption(f"Saved packet location: {applications_dir}")
+
+
+def top_packet_supported_items(packet: dict[str, object], limit: int = 3) -> list[str]:
+    evidence = packet.get("evidence_summary")
+    if not isinstance(evidence, dict):
+        return []
+    supported = _evidence_item_labels(evidence.get("supported_evidence"))
+    partial = _evidence_item_labels(evidence.get("partial_evidence"))
+    return (supported + partial)[:limit]
+
+
+def top_packet_review_items(packet: dict[str, object], limit: int = 3) -> list[str]:
+    evidence = packet.get("evidence_summary")
+    if not isinstance(evidence, dict):
+        return _as_tuple_items(packet.get("keywords_to_avoid_or_verify"))[:limit]
+    missing = _evidence_item_labels(evidence.get("missing_proof"))
+    needs_review = _evidence_item_labels(evidence.get("needs_verification"))
+    return (missing + needs_review)[:limit]
+
+
+def packet_next_actions(packet: dict[str, object], limit: int = 3) -> list[str]:
+    actions = []
+    decision_summary = packet.get("decision_summary")
+    if isinstance(decision_summary, dict):
+        next_action = str(decision_summary.get("next_action", "")).strip()
+        if next_action:
+            actions.append(next_action)
+    actions.extend(_as_tuple_items(packet.get("missing_proof_actions")))
+    actions.append("Review every draft claim before applying manually.")
+    actions.append("Save the packet if you want to keep these local files.")
+    return _dedupe(actions)[:limit]
 
 
 def _show_job_intake_mode(intake_mode: str) -> None:
@@ -618,7 +818,7 @@ def browser_capture_usage_steps() -> list[str]:
         "Highlight only the job description when possible.",
         'Click the "Capture Job Posting" bookmark.',
         "Upload the downloaded captured-job-posting.txt file below.",
-        "Review and edit the imported text before clicking Analyze Job.",
+        "Review and edit the imported text before clicking Generate application packet.",
     ]
 
 
@@ -799,7 +999,7 @@ def _show_builder_save_controls(
     else:
         save_clicked = st.button(
             "Save Packet",
-            type="primary",
+            type="secondary",
             key="builder_save_packet",
         )
 
@@ -2104,27 +2304,27 @@ def _show_profile_selector() -> dict[str, object]:
         _format_profile_label(profile): profile
         for profile in profiles
     }
+    profile_labels = list(profile_options)
     selected_label = st.selectbox(
         "Profile",
-        list(profile_options),
+        profile_labels,
+        index=default_profile_index(list(profile_options.values())),
         key="profile_selector",
     )
     profile = profile_options[selected_label]
 
-    st.caption(f"Profile ID: {profile['profile_id']} | Source: {profile['source']}")
-    st.caption(f"Profile path: {profile['profile_path']}")
     if profile.get("is_default") and not profile.get("is_local"):
-        st.warning(
-            "You are using the generic default profile. Put real private profiles "
-            "under local_profiles/ so resumes and saved applications stay separate."
+        st.info(
+            "Using a demo profile. You can still try the app now; create a private "
+            "local profile later when you want real resume details."
         )
     elif profile.get("is_local"):
         st.success("Using an ignored local profile.")
     if not has_local_profile:
-        with st.expander("Create a private local profile"):
+        with st.expander("Add a private local profile later"):
             st.caption(
-                "The app will not create private profile data for you. Create these "
-                "files locally, then restart or rerun the app."
+                "Optional: demo profiles are safe for testing. For real applications, "
+                "create these ignored local files when you are ready."
             )
             for step in local_profile_setup_steps():
                 st.write(f"- {step}")
@@ -2140,6 +2340,9 @@ def _show_profile_selector() -> dict[str, object]:
     if not profile.get("resume_text"):
         st.info("This profile does not have resume_base.md text yet.")
 
+    with st.expander("Profile details"):
+        st.caption(f"Profile ID: {profile['profile_id']} | Source: {profile['source']}")
+        st.caption(f"Profile path: {profile['profile_path']}")
     _show_proof_library(profile)
 
     if st.session_state.get("active_profile_id") != profile["profile_id"]:
@@ -2468,8 +2671,26 @@ def _format_saved_packet_label(packet: dict[str, object]) -> str:
 def _format_profile_label(profile: dict[str, object]) -> str:
     label = f"{profile['display_name']} ({profile['profile_id']})"
     if profile.get("is_local"):
-        return f"{label} - local"
-    return label
+        return f"{label} - Private local"
+    return f"{label} - Demo"
+
+
+def default_profile_index(profiles: list[dict[str, object]]) -> int:
+    if not profiles:
+        return 0
+    local_indexes = [
+        index
+        for index, profile in enumerate(profiles)
+        if bool(profile.get("is_local"))
+    ]
+    if len(local_indexes) == 1:
+        return local_indexes[0]
+    if local_indexes:
+        return local_indexes[0]
+    for index, profile in enumerate(profiles):
+        if str(profile.get("profile_id")) == DEFAULT_PROFILE_ID:
+            return index
+    return 0
 
 
 def _legacy_root_for_profile(profile: dict[str, object]) -> Path | None:

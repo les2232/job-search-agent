@@ -11,6 +11,7 @@ from ui_app import (
     choose_browser_capture_text,
     clean_captured_job_text,
     clean_imported_job_text,
+    default_profile_index,
     _evidence_suggestion_counts,
     _evidence_requirements,
     example_job_posting_text,
@@ -18,6 +19,8 @@ from ui_app import (
     extract_uploaded_job_text,
     fetch_url_text,
     _find_duplicate_saved_packets,
+    job_text_from_upload_bytes,
+    packet_next_actions,
     _recommendation_guidance,
     _requirement_slug,
     local_profile_setup_steps,
@@ -27,6 +30,8 @@ from ui_app import (
     _score_analysis_key,
     _suggest_evidence_answers,
     _suggest_evidence_for_requirement,
+    top_packet_review_items,
+    top_packet_supported_items,
     welcome_steps,
 )
 
@@ -66,7 +71,7 @@ def test_welcome_steps_explain_local_reviewable_workflow() -> None:
     text = " ".join(welcome_steps())
 
     assert "Pick a candidate profile" in text
-    assert "Paste, upload, import, or load a sample job posting" in text
+    assert "Paste, upload, or load a sample job posting" in text
     assert "deterministic fit" in text
     assert "reviewable packet" in text
     assert "Review every claim manually" in text
@@ -123,6 +128,76 @@ def test_packet_start_here_items_summarize_supported_and_review_items() -> None:
     assert "Partial evidence to strengthen: API integration experience." in items
     assert "Verify before claiming" in text
     assert "Save the packet only after checking that every claim is true." in items
+
+
+def test_default_profile_index_prefers_one_local_profile() -> None:
+    profiles = [
+        {"profile_id": "default", "is_local": False},
+        {"profile_id": "candidate", "is_local": True},
+    ]
+
+    assert default_profile_index(profiles) == 1
+
+
+def test_default_profile_index_uses_demo_default_when_no_local_profile() -> None:
+    profiles = [
+        {"profile_id": "other", "is_local": False},
+        {"profile_id": "default", "is_local": False},
+    ]
+
+    assert default_profile_index(profiles) == 1
+
+
+def test_job_text_from_upload_bytes_accepts_txt_and_md_only() -> None:
+    assert job_text_from_upload_bytes(b"Title: Support Role", "job.txt") == "Title: Support Role"
+    assert job_text_from_upload_bytes(b"# Role\r\n\r\nRemote", "job.md") == "# Role\nRemote"
+
+    try:
+        job_text_from_upload_bytes(b"<html></html>", "job.html")
+    except ValueError as error:
+        assert ".txt or .md" in str(error)
+    else:
+        raise AssertionError("HTML upload should not be accepted by the simple intake helper")
+
+
+def test_compact_packet_helpers_pull_top_supported_review_and_actions() -> None:
+    packet = {
+        "decision_summary": {
+            "next_action": "Tailor carefully and verify unresolved requirements.",
+        },
+        "evidence_summary": {
+            "supported_evidence": [
+                {"requirement": "2+ years IT support experience"},
+                {"requirement": "Microsoft 365 support"},
+            ],
+            "partial_evidence": [
+                {"requirement": "Endpoint troubleshooting"},
+            ],
+            "missing_proof": [
+                {"requirement": "7+ years administration experience"},
+            ],
+            "needs_verification": [
+                {"requirement": "Escalation ownership"},
+            ],
+        },
+        "missing_proof_actions": [
+            "7+ years administration experience: verify before claiming.",
+        ],
+    }
+
+    assert top_packet_supported_items(packet) == [
+        "2+ years IT support experience",
+        "Microsoft 365 support",
+        "Endpoint troubleshooting",
+    ]
+    assert top_packet_review_items(packet) == [
+        "7+ years administration experience",
+        "Escalation ownership",
+    ]
+    assert packet_next_actions(packet)[:2] == [
+        "Tailor carefully and verify unresolved requirements.",
+        "7+ years administration experience: verify before claiming.",
+    ]
 
 
 def _score_result(
