@@ -1,4 +1,8 @@
 from job_parser import parse_job_text
+from pathlib import Path
+
+
+FIXTURE_DIR = Path(__file__).parent / "fixtures" / "jobs"
 
 
 def test_parse_job_text_extracts_labeled_fields() -> None:
@@ -18,12 +22,60 @@ Use Python and SQL to support dashboards.
     assert "Python and SQL" in job["raw_text"]
 
 
+def test_parse_job_text_extracts_clean_labeled_position_and_work_mode() -> None:
+    job = parse_job_text(
+        """Position: AI Developer
+Company: Example Automation Lab
+Location: Denver, CO
+Work Arrangement: Remote with travel
+
+Responsibilities:
+- Build deterministic automation tools.
+- Document repeatable workflows.
+"""
+    )
+
+    assert job["title"] == "AI Developer"
+    assert job["company"] == "Example Automation Lab"
+    assert job["location"] == "Denver, CO"
+    assert job["work_mode"] == "Remote"
+
+
 def test_parse_job_text_returns_unknown_for_missing_labels() -> None:
     job = parse_job_text("Use Python to automate reporting workflows.")
 
     assert job["title"] == "Unknown"
     assert job["company"] == "Unknown"
     assert job["location"] == "Unknown"
+
+
+def test_parse_job_text_extracts_narrative_bridge_partners_shape() -> None:
+    job = parse_job_text((FIXTURE_DIR / "bridge_partners_ai_developer.txt").read_text())
+
+    assert job["title"] == "AI Developer"
+    assert job["company"] == "Bridge Partners"
+    assert job["location"] == "Unknown"
+    assert job["work_mode"] == "Remote"
+
+
+def test_parse_job_text_ignores_generic_section_headings_without_guessing() -> None:
+    job = parse_job_text(
+        """About the job
+About the Company
+How you'll contribute
+Your skills and approach
+Compensation
+Work Eligibility
+Benefits
+
+We build useful software and value clear documentation.
+This role is remote.
+"""
+    )
+
+    assert job["title"] == "Unknown"
+    assert job["company"] == "Unknown"
+    assert job["work_mode"] == "Remote"
 
 
 def test_parse_job_text_extracts_common_labeled_fields() -> None:
@@ -58,6 +110,36 @@ document workflows, and coordinate escalations.
     assert job["location"] == "Denver, CO (Hybrid)"
     assert job["work_mode"] == "Hybrid"
     assert job["parser_debug"]["fallback_path"] == "top-line inference"
+
+
+def test_parse_job_text_handles_noisy_copied_posting_with_heading_title() -> None:
+    job = parse_job_text(
+        """Home
+Search jobs
+Apply now
+Save job
+
+The role: Platform Support Analyst
+Example Cloud Studio
+Remote with travel
+
+About the job
+This role is remote, with preferred hubs in Denver, CO and Austin, TX.
+
+Your skills and approach
+- Troubleshooting SaaS integrations
+- SQL
+- Customer documentation
+
+Share job
+Similar jobs
+"""
+    )
+
+    assert job["title"] == "Platform Support Analyst"
+    assert job["company"] == "Example Cloud Studio"
+    assert job["location"] == "Remote with travel"
+    assert job["work_mode"] == "Remote"
 
 
 def test_parse_job_text_uses_separate_fields_before_raw_text() -> None:
