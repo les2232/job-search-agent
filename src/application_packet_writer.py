@@ -135,6 +135,7 @@ def _get_metadata(score_result: dict[str, object]) -> dict[str, str]:
         "company": _safe_text(metadata.get("company"), "Unknown"),
         "location": _safe_text(metadata.get("location"), "Unknown"),
         "work_mode": _safe_text(metadata.get("work_mode"), "Unknown"),
+        "source_url": _safe_text(metadata.get("source_url"), ""),
     }
 
 
@@ -156,6 +157,7 @@ def _build_job_summary(
             f"- Company: {metadata['company']}",
             f"- Location: {metadata['location']}",
             f"- Work mode: {metadata['work_mode']}",
+            f"- Source URL: {metadata['source_url'] or 'None'}",
             f"- Score: {score_result.get('score', 'Unknown')}/100",
             f"- Recommendation: {score_result.get('recommendation', 'Unknown')}",
             f"- Matched keywords: {_format_inline_list(score_result.get('matched_keywords'))}",

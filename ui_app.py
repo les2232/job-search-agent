@@ -1,6 +1,7 @@
 """Local Streamlit UI for the job search agent."""
 
 from collections import Counter
+import html
 from html.parser import HTMLParser
 from pathlib import Path
 import re
@@ -58,6 +59,55 @@ MAX_IMPORTED_JOB_BYTES = 1_000_000
 MAX_CAPTURED_JOB_CHARS = 100_000
 MIN_CAPTURED_JOB_CHARS = 80
 JOB_SAMPLE_DIR = PROJECT_ROOT / "tests" / "fixtures" / "jobs"
+MIN_USEFUL_JOB_CHARS = 350
+MIN_USEFUL_JOB_LINES = 8
+
+NOISY_JOB_PAGE_LINES = {
+    "apply",
+    "apply now",
+    "save",
+    "save job",
+    "share",
+    "share job",
+    "source link",
+    "copy link",
+    "job details",
+    "sign in",
+    "sign up",
+    "create alert",
+    "create job alert",
+    "careers",
+    "home",
+    "jobs",
+    "search jobs",
+    "view all jobs",
+    "similar jobs",
+    "report job",
+    "print",
+    "back to search results",
+}
+NOISY_JOB_PAGE_PREFIXES = (
+    "accept all cookies",
+    "accept cookies",
+    "by using this site",
+    "cookie",
+    "cookies",
+    "privacy policy",
+    "terms of use",
+    "terms and conditions",
+    "we use cookies",
+    "this website uses cookies",
+    "enable javascript",
+    "skip to main content",
+    "posted on",
+    "share this job",
+    "source:",
+    "follow us",
+    "connect with us",
+    "all rights reserved",
+    "©",
+)
+SOURCE_URL_PATTERN = re.compile(r"https?://[^\s<>)\"']+", flags=re.IGNORECASE)
 
 
 GENERIC_EXAMPLE_JOB_TEXT = """Job Title: IT Support Specialist
@@ -164,6 +214,112 @@ def example_job_posting_text() -> str:
     return GENERIC_EXAMPLE_JOB_TEXT
 
 
+def clean_job_posting_text(text: str) -> str:
+    """Return conservative readable job text from messy copied page content."""
+    if not text:
+        return ""
+    readable_text = extract_readable_html_text(text) if _looks_like_html(text) else text
+    normalized_text = html_unescape_job_text(readable_text)
+    cleaned_lines = []
+    seen_lines = set()
+    previous_blank = False
+    for raw_line in normalized_text.splitlines():
+        line = _clean_job_posting_line(raw_line)
+        if not line:
+            if cleaned_lines and not previous_blank:
+                cleaned_lines.append("")
+            previous_blank = True
+            continue
+        previous_blank = False
+        if _is_noisy_job_page_line(line):
+            continue
+        duplicate_key = _normalize_duplicate_line(line)
+        if duplicate_key in seen_lines:
+            continue
+        seen_lines.add(duplicate_key)
+        cleaned_lines.append(line)
+    return "\n".join(cleaned_lines).strip()
+
+
+def html_unescape_job_text(text: str) -> str:
+    return (
+        html.unescape(text)
+        .replace("\r\n", "\n")
+        .replace("\r", "\n")
+        .replace("\u00a0", " ")
+        .replace("â€œ", '"')
+        .replace("â€", '"')
+        .replace("â€™", "'")
+        .replace("â€“", "-")
+        .replace("â€”", "-")
+        .replace("â€¢", "-")
+    )
+
+
+def extract_job_url(text: str) -> str | None:
+    match = SOURCE_URL_PATTERN.search(text or "")
+    if not match:
+        return None
+    return match.group(0).rstrip(".,;]")
+
+
+def summarize_job_input_quality(text: str) -> dict[str, object]:
+    clean_text = clean_job_posting_text(text)
+    lines = [line for line in clean_text.splitlines() if line.strip()]
+    has_requirements = any(
+        marker in clean_text.lower()
+        for marker in ["requirement", "qualification", "responsibilities", "experience", "skills"]
+    )
+    is_useful = (
+        len(clean_text) >= MIN_USEFUL_JOB_CHARS
+        and len(lines) >= MIN_USEFUL_JOB_LINES
+        and has_requirements
+    )
+    if is_useful:
+        message = "Looks good. The posting has enough text to score and generate a packet."
+    elif not clean_text.strip():
+        message = "Paste the job title, company, responsibilities, qualifications, and salary/location if available."
+    else:
+        message = "Needs more text. You can paste the whole job page; the app will try to clean it."
+    return {
+        "status": "looks_good" if is_useful else "needs_more_text",
+        "message": message,
+        "cleaned_text": clean_text,
+        "character_count": len(clean_text),
+        "line_count": len(lines),
+        "source_url": extract_job_url(text),
+    }
+
+
+def read_uploaded_job_file(payload: bytes, filename: str) -> str:
+    suffix = Path(filename).suffix.lower()
+    if suffix not in {".txt", ".md", ".html", ".htm"}:
+        raise ValueError("Upload a .txt, .md, or saved .html job posting file.")
+    return clean_job_posting_text(extract_uploaded_job_text(payload, filename))
+
+
+def _clean_job_posting_line(line: str) -> str:
+    clean_line = " ".join(str(line).strip().split())
+    return clean_line.strip(" \t|")
+
+
+def _normalize_duplicate_line(line: str) -> str:
+    return re.sub(r"\s+", " ", line.strip().lower())
+
+
+def _is_noisy_job_page_line(line: str) -> bool:
+    normalized = _normalize_duplicate_line(line).strip(" .:|")
+    if normalized in NOISY_JOB_PAGE_LINES:
+        return True
+    if SOURCE_URL_PATTERN.fullmatch(line.strip()):
+        return True
+    if any(normalized.startswith(prefix) for prefix in NOISY_JOB_PAGE_PREFIXES):
+        return True
+    if normalized.startswith(("facebook", "linkedin", "twitter", "x ")) and len(normalized.split()) <= 4:
+        return True
+    return False
+
+
 def packet_start_here_items(packet: dict[str, object]) -> list[str]:
     items = []
     decision_summary = packet.get("decision_summary")
@@ -234,13 +390,13 @@ def _show_guided_packet_builder(
     st.divider()
     st.header("Step 2: Add Job Posting")
     st.caption(
-        "Paste a posting or upload a saved .txt/.md file. The app only uses text "
+        "Paste a posting or upload a saved .txt/.md/.html file. The app only uses text "
         "you provide on this computer."
     )
 
     uploaded_file = st.file_uploader(
         "Upload a saved job posting",
-        type=["txt", "md"],
+        type=["txt", "md", "html", "htm"],
         key="builder_simple_upload",
     )
     _load_uploaded_job_text_into_session(uploaded_file)
@@ -271,7 +427,11 @@ def _show_guided_packet_builder(
         "Keep only the posting text you want reviewed. Copied navigation or ads can be deleted."
     )
 
-    detected_job = parse_job_text(job_text) if job_text.strip() else None
+    quality_summary = summarize_job_input_quality(job_text)
+    cleaned_job_text = str(quality_summary["cleaned_text"])
+    _show_job_input_quality(quality_summary)
+
+    detected_job = parse_job_text(cleaned_job_text) if cleaned_job_text.strip() else None
     detail_overrides = _show_detected_job_details(detected_job)
 
     st.divider()
@@ -288,14 +448,18 @@ def _show_guided_packet_builder(
 
     if generate_clicked:
         full_job_text = _build_guided_job_text(
-            job_text,
+            cleaned_job_text,
             title=detail_overrides.get("title", ""),
             company=detail_overrides.get("company", ""),
             location=detail_overrides.get("location", ""),
             work_mode=detail_overrides.get("work_mode", ""),
         )
         if not full_job_text.strip():
-            st.error("Paste or upload a job posting before generating a packet.")
+            st.error(
+                "Paste the job title, company, responsibilities, qualifications, "
+                "and salary/location if available. You can paste the whole job page; "
+                "the app will try to clean it."
+            )
         else:
             job = parse_job_text(
                 full_job_text,
@@ -304,6 +468,9 @@ def _show_guided_packet_builder(
                 location=detail_overrides.get("location", ""),
             )
             score_details = score_job(job)
+            source_url = str(quality_summary.get("source_url") or "")
+            if source_url:
+                _attach_source_url(score_details, source_url)
             evidence_answers = _suggest_evidence_answers(
                 profile,
                 _evidence_requirements(score_details),
@@ -316,6 +483,7 @@ def _show_guided_packet_builder(
             st.session_state["builder_job"] = job
             st.session_state["builder_score_details"] = score_details
             st.session_state["builder_full_job_text"] = full_job_text
+            st.session_state["builder_source_url"] = source_url
             st.session_state["builder_analysis_key"] = _score_analysis_key(score_details)
             st.session_state["builder_evidence_answers"] = evidence_answers
             st.session_state["builder_packet"] = packet
@@ -341,17 +509,42 @@ def _load_uploaded_job_text_into_session(uploaded_file: object | None) -> None:
     upload_key = f"{name}:{len(payload)}"
     if st.session_state.get("builder_uploaded_job_key") == upload_key:
         return
-    st.session_state["builder_job_text"] = job_text_from_upload_bytes(payload, name)
+    st.session_state["builder_job_text"] = read_uploaded_job_file(payload, name)
     st.session_state["builder_uploaded_job_key"] = upload_key
     st.success("Loaded uploaded job text. Review it below before generating.")
     st.rerun()
 
 
 def job_text_from_upload_bytes(payload: bytes, filename: str) -> str:
-    suffix = Path(filename).suffix.lower()
-    if suffix not in {".txt", ".md"}:
-        raise ValueError("Upload a .txt or .md job posting file.")
-    return extract_uploaded_job_text(payload, filename)
+    return read_uploaded_job_file(payload, filename)
+
+
+def _show_job_input_quality(summary: dict[str, object]) -> None:
+    clean_text = str(summary.get("cleaned_text") or "")
+    source_url = summary.get("source_url")
+    if source_url:
+        st.caption(f"Source link found: {source_url}")
+    if summary.get("status") == "looks_good":
+        st.success(str(summary["message"]))
+    else:
+        st.info(str(summary["message"]))
+    if clean_text:
+        with st.expander("Cleaned posting preview"):
+            st.text_area(
+                "Cleaned text used for detection and packet generation",
+                value=clean_text,
+                height=240,
+                key="builder_cleaned_job_preview",
+                disabled=True,
+            )
+
+
+def _attach_source_url(score_details: dict[str, object], source_url: str) -> None:
+    metadata = score_details.get("job_metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+        score_details["job_metadata"] = metadata
+    metadata["source_url"] = source_url
 
 
 def _show_local_intake_helper(helper_mode: str) -> None:

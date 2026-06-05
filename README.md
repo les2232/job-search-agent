@@ -101,14 +101,32 @@ profile exists, the UI prefers it by default; otherwise the committed demo
 profile is enough to try the app.
 
 For job intake, paste the posting into the large text box or upload a saved
-`.txt` or `.md` file. The app detects title, company, location, and work mode
-from the text when it can. Manual corrections are optional and hidden in an
-expander.
+`.txt`, `.md`, `.html`, or `.htm` file. The app detects title, company,
+location, and work mode from the text when it can. Manual corrections are
+optional and hidden in an expander.
 
 The default action is `Generate application packet`. That one button parses the
 posting, scores the fit, suggests evidence from the selected profile, and builds
 local draft materials. Review the compact result first, then open the detailed
 drafts below it.
+
+## Fastest Way To Add A Job Posting
+
+1. Open a job page you already chose.
+2. Select the job posting text, or select the whole page if that is easier.
+3. Paste it into the large `Job posting text` box.
+4. Check the detected title, company, location, and work mode.
+5. Click `Generate application packet`.
+
+Messy copied page text is okay. The app tries to remove common navigation,
+cookie banners, duplicate lines, share/footer fragments, and blank-line spam
+before parsing. It keeps the cleaned preview visible in an expander so you can
+quickly check what will be used.
+
+You can also upload a local `.txt`, `.md`, `.html`, or `.htm` file saved from a
+job page. HTML files are converted to readable text locally. If you paste a job
+URL, the app can show it as a source link, but it does not fetch the URL, scrape
+the page, ask for credentials, or apply to the job.
 
 - `Dashboard`: high-level tracker and saved-application counts.
 - `Today`: applications that are overdue, due soon, ready to apply, or missing
@@ -282,7 +300,7 @@ In the Streamlit guided builder, Step 2 supports several ways to add a job
 posting:
 
 - paste job text directly
-- upload a saved `.txt` or `.md` job post file
+- upload a saved `.txt`, `.md`, `.html`, or `.htm` job post file
 - load a fake example or committed sample fixture for testing
 - use the optional browser-capture bookmarklet
 

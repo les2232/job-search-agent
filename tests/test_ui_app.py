@@ -10,6 +10,7 @@ from ui_app import (
     browser_capture_usage_steps,
     choose_browser_capture_text,
     clean_captured_job_text,
+    clean_job_posting_text,
     clean_imported_job_text,
     default_profile_index,
     _evidence_suggestion_counts,
@@ -19,8 +20,10 @@ from ui_app import (
     extract_uploaded_job_text,
     fetch_url_text,
     _find_duplicate_saved_packets,
+    extract_job_url,
     job_text_from_upload_bytes,
     packet_next_actions,
+    read_uploaded_job_file,
     _recommendation_guidance,
     _requirement_slug,
     local_profile_setup_steps,
@@ -30,6 +33,7 @@ from ui_app import (
     _score_analysis_key,
     _suggest_evidence_answers,
     _suggest_evidence_for_requirement,
+    summarize_job_input_quality,
     top_packet_review_items,
     top_packet_supported_items,
     welcome_steps,
@@ -148,16 +152,90 @@ def test_default_profile_index_uses_demo_default_when_no_local_profile() -> None
     assert default_profile_index(profiles) == 1
 
 
-def test_job_text_from_upload_bytes_accepts_txt_and_md_only() -> None:
+def test_job_text_from_upload_bytes_accepts_txt_md_and_saved_html() -> None:
     assert job_text_from_upload_bytes(b"Title: Support Role", "job.txt") == "Title: Support Role"
     assert job_text_from_upload_bytes(b"# Role\r\n\r\nRemote", "job.md") == "# Role\nRemote"
+    html_text = job_text_from_upload_bytes(
+        b"<html><body><nav>Apply now</nav><h1>Support Analyst</h1><p>Requirements: SQL and documentation.</p></body></html>",
+        "job.html",
+    )
 
+    assert "Support Analyst" in html_text
+    assert "Requirements: SQL and documentation." in html_text
+    assert "Apply now" not in html_text
+
+
+def test_read_uploaded_job_file_rejects_unsupported_files() -> None:
     try:
-        job_text_from_upload_bytes(b"<html></html>", "job.html")
+        read_uploaded_job_file(b"%PDF", "job.pdf")
     except ValueError as error:
-        assert ".txt or .md" in str(error)
+        assert ".txt, .md, or saved .html" in str(error)
     else:
-        raise AssertionError("HTML upload should not be accepted by the simple intake helper")
+        raise AssertionError("PDF upload should not be accepted by the simple intake helper")
+
+
+def test_clean_job_posting_text_removes_common_page_noise_and_duplicates() -> None:
+    messy_text = """
+    Home
+    Apply now
+    Save job
+    Job Title: IT Support Specialist
+    Example Organization
+    Remote
+
+
+    We use cookies to improve your experience.
+    Responsibilities:
+    Responsibilities:
+    Troubleshoot Microsoft 365 access issues for employees.
+    Qualifications:
+    - SQL
+    - IT support
+    Share job
+    All rights reserved.
+    """
+
+    cleaned = clean_job_posting_text(messy_text)
+
+    assert "Apply now" not in cleaned
+    assert "Save job" not in cleaned
+    assert "We use cookies" not in cleaned
+    assert "Share job" not in cleaned
+    assert cleaned.count("Responsibilities:") == 1
+    assert "- SQL" in cleaned
+    assert "- IT support" in cleaned
+    assert "Troubleshoot Microsoft 365 access issues" in cleaned
+
+
+def test_extract_job_url_detects_source_without_fetching() -> None:
+    text = "Source: https://example.com/jobs/123?ref=abc. Paste follows."
+
+    assert extract_job_url(text) == "https://example.com/jobs/123?ref=abc"
+
+
+def test_summarize_job_input_quality_distinguishes_weak_and_useful_text() -> None:
+    weak = summarize_job_input_quality("Apply now\nSave job\nRemote")
+    useful = summarize_job_input_quality(
+        """
+        Job Title: IT Support Specialist
+        Company: Example Organization
+        Location: Remote
+        Responsibilities:
+        Troubleshoot Microsoft 365 access issues for employees.
+        Document repeatable support fixes.
+        Escalate complex endpoint problems.
+        Qualifications:
+        2+ years of IT support or help desk experience.
+        Experience with account access and endpoint troubleshooting.
+        Strong communication and careful documentation habits.
+        Salary range: $55,000 - $65,000
+        """
+    )
+
+    assert weak["status"] == "needs_more_text"
+    assert "Needs more text" in str(weak["message"])
+    assert useful["status"] == "looks_good"
+    assert "Looks good" in str(useful["message"])
 
 
 def test_compact_packet_helpers_pull_top_supported_review_and_actions() -> None:
