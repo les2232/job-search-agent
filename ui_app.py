@@ -127,15 +127,15 @@ Requirements:
 
 
 def main() -> None:
-    st.set_page_config(page_title="Application Packet Builder", layout="wide")
-    st.title("Application Packet Builder")
-    st.write(
-        "Paste a job posting, review the fit, generate a local application packet, "
-        "and save it under the selected profile."
-    )
+    st.set_page_config(page_title="Job Packet Studio", layout="wide")
+    inject_app_styles()
+    render_app_header()
     _show_welcome_section()
 
-    st.subheader("Step 1: Choose Profile")
+    render_step_card(
+        "Step 1: Choose profile",
+        "Pick the resume/profile facts the packet should use.",
+    )
     selected_profile = _show_profile_selector()
     selected_applications_dir = profile_applications_dir(
         APPLICATIONS_DIR,
@@ -212,6 +212,219 @@ def local_profile_setup_steps(profile_id: str = "candidate") -> list[str]:
 
 def example_job_posting_text() -> str:
     return GENERIC_EXAMPLE_JOB_TEXT
+
+
+def inject_app_styles() -> None:
+    st.markdown(app_style_css(), unsafe_allow_html=True)
+
+
+def app_style_css() -> str:
+    return """
+<style>
+:root {
+  --studio-accent: #2f6f73;
+  --studio-accent-soft: #e8f3f2;
+  --studio-border: #d8e1df;
+  --studio-card: #f8fbfa;
+  --studio-text-soft: #4f6363;
+  --studio-warning: #8a5a00;
+  --studio-warning-bg: #fff6dd;
+  --studio-success: #206a43;
+  --studio-success-bg: #eaf6ef;
+}
+.block-container {
+  padding-top: 2rem;
+  max-width: 1180px;
+}
+.studio-hero {
+  border: 1px solid var(--studio-border);
+  border-radius: 16px;
+  padding: 1.35rem 1.5rem;
+  background: linear-gradient(135deg, #f8fbfa 0%, #eef6f4 100%);
+  margin-bottom: 1rem;
+}
+.studio-eyebrow {
+  color: var(--studio-accent);
+  font-weight: 700;
+  letter-spacing: 0;
+  margin-bottom: .2rem;
+}
+.studio-hero h1 {
+  margin: 0;
+  font-size: 2.15rem;
+  line-height: 1.15;
+}
+.studio-subtitle {
+  color: var(--studio-text-soft);
+  font-size: 1.05rem;
+  margin: .35rem 0 .75rem 0;
+}
+.studio-safety {
+  display: inline-flex;
+  gap: .45rem;
+  align-items: center;
+  border: 1px solid var(--studio-border);
+  border-radius: 999px;
+  padding: .28rem .7rem;
+  background: #ffffff;
+  color: #2f4747;
+  font-size: .92rem;
+}
+.studio-step {
+  border: 1px solid var(--studio-border);
+  border-radius: 14px;
+  padding: 1rem 1.1rem;
+  background: var(--studio-card);
+  margin: 1rem 0 .8rem 0;
+}
+.studio-step h2 {
+  font-size: 1.2rem;
+  margin: 0 0 .25rem 0;
+}
+.studio-step p {
+  color: var(--studio-text-soft);
+  margin: 0;
+}
+.studio-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  margin: .45rem 0 .65rem 0;
+}
+.studio-chip, .studio-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  border-radius: 999px;
+  border: 1px solid var(--studio-border);
+  background: #ffffff;
+  color: #263f40;
+  padding: .32rem .68rem;
+  font-size: .92rem;
+  line-height: 1.25;
+}
+.studio-chip strong {
+  color: var(--studio-accent);
+}
+.studio-badge.success {
+  border-color: #b7dec6;
+  background: var(--studio-success-bg);
+  color: var(--studio-success);
+}
+.studio-badge.warning {
+  border-color: #ead391;
+  background: var(--studio-warning-bg);
+  color: var(--studio-warning);
+}
+.studio-summary {
+  border: 1px solid var(--studio-border);
+  border-radius: 16px;
+  padding: 1rem 1.15rem;
+  background: #ffffff;
+  margin: .7rem 0 1rem 0;
+}
+.studio-summary h3 {
+  margin: 0 0 .35rem 0;
+  font-size: 1.2rem;
+}
+.studio-summary-meta {
+  color: var(--studio-text-soft);
+  margin-bottom: .65rem;
+}
+.studio-muted {
+  color: var(--studio-text-soft);
+}
+</style>
+""".strip()
+
+
+def render_app_header() -> None:
+    st.markdown(app_header_html(), unsafe_allow_html=True)
+
+
+def app_header_html() -> str:
+    return """
+<section class="studio-hero">
+  <div class="studio-eyebrow">Local application workspace</div>
+  <h1>Job Packet Studio</h1>
+  <p class="studio-subtitle">Turn a job posting into a reviewable application packet.</p>
+  <span class="studio-safety">Local-first: no scraping, credentials, AI API calls, or auto-apply.</span>
+</section>
+""".strip()
+
+
+def render_step_card(title: str, helper: str, status: str = "") -> None:
+    st.markdown(step_card_html(title, helper, status), unsafe_allow_html=True)
+
+
+def step_card_html(title: str, helper: str, status: str = "") -> str:
+    status_html = f"<div>{status_badge_html(status)}</div>" if status else ""
+    return (
+        '<section class="studio-step">'
+        f"<h2>{html.escape(title)}</h2>"
+        f"<p>{html.escape(helper)}</p>"
+        f"{status_html}"
+        "</section>"
+    )
+
+
+def status_badge_html(status: str, label: str | None = None) -> str:
+    normalized = status.strip().lower().replace("_", "-")
+    badge_class = "success" if normalized in {"ready", "looks-good", "success"} else "warning"
+    if label is None:
+        label = "Looks usable" if badge_class == "success" else "Needs review"
+    return (
+        f'<span class="studio-badge {badge_class}">'
+        f"<strong>{html.escape(label)}</strong>"
+        f"</span>"
+    )
+
+
+def detected_detail_chips(
+    details: dict[str, object] | None,
+    source_url: object = "",
+) -> list[str]:
+    if not isinstance(details, dict):
+        return []
+    chip_values = [
+        ("Title", details.get("title")),
+        ("Company", details.get("company")),
+        ("Work mode", details.get("work_mode")),
+        ("Location", details.get("location")),
+        ("Source", source_url),
+    ]
+    chips = []
+    for label, value in chip_values:
+        clean_value = str(value or "").strip()
+        if not clean_value or clean_value.lower() == "unknown":
+            continue
+        chips.append(
+            '<span class="studio-chip">'
+            f"<strong>{html.escape(label)}:</strong> {html.escape(clean_value)}"
+            "</span>"
+        )
+    return chips
+
+
+def render_detected_detail_chips(
+    details: dict[str, object] | None,
+    source_url: object = "",
+) -> None:
+    chips = detected_detail_chips(details, source_url)
+    if chips:
+        st.markdown(
+            '<div class="studio-chip-row">' + "".join(chips) + "</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.info("Detected job details will appear here after you paste or upload text.")
+
+
+def job_empty_state_text() -> str:
+    return (
+        "Paste the whole job page here - the app will clean common clutter. "
+        "You can also upload .txt, .md, .html, or .htm files."
+    )
 
 
 def clean_job_posting_text(text: str) -> str:
@@ -387,11 +600,9 @@ def _show_guided_packet_builder(
     profile: dict[str, object],
     applications_dir: Path,
 ) -> None:
-    st.divider()
-    st.header("Step 2: Add Job Posting")
-    st.caption(
-        "Paste a posting or upload a saved .txt/.md/.html file. The app only uses text "
-        "you provide on this computer."
+    render_step_card(
+        "Step 2: Add job posting",
+        "Paste a posting or upload a saved file. The app only uses text you provide on this computer.",
     )
 
     uploaded_file = st.file_uploader(
@@ -418,27 +629,23 @@ def _show_guided_packet_builder(
         "Job posting text",
         height=360,
         key="builder_job_text",
-        placeholder=(
-            "Paste the full job posting here. Include the title, company, location, "
-            "requirements, responsibilities, and benefits if they are available."
-        ),
+        placeholder=job_empty_state_text(),
     )
-    st.caption(
-        "Keep only the posting text you want reviewed. Copied navigation or ads can be deleted."
-    )
+    st.caption(job_empty_state_text())
 
     quality_summary = summarize_job_input_quality(job_text)
     cleaned_job_text = str(quality_summary["cleaned_text"])
     _show_job_input_quality(quality_summary)
 
     detected_job = parse_job_text(cleaned_job_text) if cleaned_job_text.strip() else None
-    detail_overrides = _show_detected_job_details(detected_job)
+    detail_overrides = _show_detected_job_details(
+        detected_job,
+        quality_summary.get("source_url"),
+    )
 
-    st.divider()
-    st.header("Step 3: Generate and Review Packet")
-    st.caption(
-        "One click parses the job, scores the fit, suggests evidence from the selected "
-        "profile, and builds local drafts for review."
+    render_step_card(
+        "Step 3: Generate packet",
+        "One click scores the fit, suggests evidence, and builds local drafts for review.",
     )
     generate_clicked = st.button(
         "Generate application packet",
@@ -525,9 +732,16 @@ def _show_job_input_quality(summary: dict[str, object]) -> None:
     if source_url:
         st.caption(f"Source link found: {source_url}")
     if summary.get("status") == "looks_good":
-        st.success(str(summary["message"]))
+        st.markdown(
+            status_badge_html("looks-good", "Looks usable") + f" {html.escape(str(summary['message']))}",
+            unsafe_allow_html=True,
+        )
     else:
-        st.info(str(summary["message"]))
+        st.markdown(
+            status_badge_html("needs-review", "Needs more text")
+            + f" {html.escape(str(summary['message']))}",
+            unsafe_allow_html=True,
+        )
     if clean_text:
         with st.expander("Cleaned posting preview"):
             st.text_area(
@@ -588,17 +802,16 @@ def _show_browser_capture_helper() -> None:
     _show_job_intake_mode("Browser capture")
 
 
-def _show_detected_job_details(job: dict[str, object] | None) -> dict[str, str]:
+def _show_detected_job_details(
+    job: dict[str, object] | None,
+    source_url: object = "",
+) -> dict[str, str]:
     if not isinstance(job, dict):
         st.info("Detected job details will appear here after you paste or upload text.")
         return {}
 
     st.markdown("**Detected details**")
-    detail_cols = st.columns(4)
-    detail_cols[0].metric("Title", str(job.get("title", "Unknown")))
-    detail_cols[1].metric("Company", str(job.get("company", "Unknown")))
-    detail_cols[2].metric("Location", str(job.get("location", "Unknown")))
-    detail_cols[3].metric("Work mode", str(job.get("work_mode", "Unknown")))
+    render_detected_detail_chips(job, source_url)
 
     with st.expander("Edit detected details"):
         st.caption("Only change these if the automatic detection is wrong or missing.")
@@ -666,28 +879,73 @@ def _show_compact_packet_result(
     applications_dir: Path,
     saved_packet: object,
 ) -> None:
-    st.subheader("Packet result")
-    metric_cols = st.columns(4)
-    metric_cols[0].metric("Score", f"{score_details.get('score', 'Unknown')}/100")
-    metric_cols[1].metric("Recommendation", str(score_details.get("recommendation", "Unknown")))
-    metric_cols[2].metric("Role", str(job.get("title", "Unknown")))
-    metric_cols[3].metric("Company", str(job.get("company", "Unknown")))
+    render_packet_summary_card(
+        packet_summary_card_data(job, score_details, packet, applications_dir, saved_packet)
+    )
 
-    result_cols = st.columns(3)
-    with result_cols[0]:
-        st.markdown("**Top supported evidence**")
-        _show_plain_list(top_packet_supported_items(packet))
-    with result_cols[1]:
-        st.markdown("**Top review items**")
-        _show_plain_list(top_packet_review_items(packet))
-    with result_cols[2]:
-        st.markdown("**Next 3 actions**")
-        _show_plain_list(packet_next_actions(packet))
+    save_location = packet_save_location(applications_dir, saved_packet)
+    st.caption(f"Saved packet location: {save_location}")
 
+
+def packet_save_location(applications_dir: Path, saved_packet: object) -> str:
     if isinstance(saved_packet, dict):
-        st.success(f"Saved packet location: {saved_packet['folder_path']}")
-    else:
-        st.caption(f"Saved packet location: {applications_dir}")
+        return str(saved_packet.get("folder_path") or applications_dir)
+    return str(applications_dir)
+
+
+def packet_summary_card_data(
+    job: dict[str, object],
+    score_details: dict[str, object],
+    packet: dict[str, object],
+    applications_dir: Path,
+    saved_packet: object,
+) -> dict[str, object]:
+    return {
+        "score": score_details.get("score", "Unknown"),
+        "recommendation": str(score_details.get("recommendation", "Unknown")),
+        "title": str(job.get("title", "Unknown")),
+        "company": str(job.get("company", "Unknown")),
+        "supported": top_packet_supported_items(packet),
+        "review": top_packet_review_items(packet),
+        "actions": packet_next_actions(packet),
+        "save_location": packet_save_location(applications_dir, saved_packet),
+    }
+
+
+def render_packet_summary_card(summary: dict[str, object]) -> None:
+    st.markdown(packet_summary_card_html(summary), unsafe_allow_html=True)
+
+
+def packet_summary_card_html(summary: dict[str, object]) -> str:
+    title = html.escape(str(summary.get("title", "Unknown")))
+    company = html.escape(str(summary.get("company", "Unknown")))
+    score = html.escape(str(summary.get("score", "Unknown")))
+    recommendation = html.escape(str(summary.get("recommendation", "Unknown")))
+    save_location = html.escape(str(summary.get("save_location", "")))
+    return (
+        '<section class="studio-summary">'
+        "<h3>Packet summary</h3>"
+        f'<div class="studio-summary-meta">{title} at {company}</div>'
+        '<div class="studio-chip-row">'
+        f'<span class="studio-chip"><strong>Match score:</strong> {score}/100</span>'
+        f'<span class="studio-chip"><strong>Recommendation:</strong> {recommendation}</span>'
+        "</div>"
+        "<strong>Top supported evidence</strong>"
+        f"{html_list(summary.get('supported'))}"
+        "<strong>Top review items</strong>"
+        f"{html_list(summary.get('review'))}"
+        "<strong>Next actions</strong>"
+        f"{html_list(summary.get('actions'))}"
+        f'<div class="studio-muted">Saved packet location: {save_location}</div>'
+        "</section>"
+    )
+
+
+def html_list(values: object) -> str:
+    if not isinstance(values, list) or not values:
+        return '<p class="studio-muted">None.</p>'
+    items = "".join(f"<li>{html.escape(str(value))}</li>" for value in values)
+    return f"<ul>{items}</ul>"
 
 
 def top_packet_supported_items(packet: dict[str, object], limit: int = 3) -> list[str]:
@@ -1766,32 +2024,31 @@ def _show_packet_preview(
 
     preview_tabs = st.tabs(
         [
-            "Tailored Resume",
-            "Cover Letter",
-            "Recruiter Message",
+            "Resume focus",
+            "Tailored resume draft",
+            "Cover letter",
+            "Recruiter message",
             "Checklist",
-            "Resume Strategy",
-            "Decision Summary",
-            "Score Explanation",
-            "Risk Notes",
+            "Risk notes",
+            "Details / metadata",
         ]
     )
     with preview_tabs[0]:
-        st.markdown(str(packet.get("tailored_resume_draft", "")))
-    with preview_tabs[1]:
-        st.text(str(packet.get("cover_letter_draft", "")))
-    with preview_tabs[2]:
-        st.text(str(packet.get("recruiter_message", "")))
-    with preview_tabs[3]:
-        _show_plain_list(packet.get("application_checklist"))
-    with preview_tabs[4]:
+        _show_plain_list(packet.get("resume_focus_areas"))
         _show_resume_strategy(packet)
+    with preview_tabs[1]:
+        st.markdown(str(packet.get("tailored_resume_draft", "")))
+    with preview_tabs[2]:
+        st.text(str(packet.get("cover_letter_draft", "")))
+    with preview_tabs[3]:
+        st.text(str(packet.get("recruiter_message", "")))
+    with preview_tabs[4]:
+        _show_plain_list(packet.get("application_checklist"))
     with preview_tabs[5]:
-        _show_decision_summary(packet.get("decision_summary"))
-    with preview_tabs[6]:
-        _show_score_explanation(score_details.get("explanation"))
-    with preview_tabs[7]:
         _show_plain_list(packet.get("risk_notes"))
+    with preview_tabs[6]:
+        _show_decision_summary(packet.get("decision_summary"))
+        _show_score_explanation(score_details.get("explanation"))
 
 
 def _show_next_action_section(
@@ -2483,16 +2740,9 @@ def _show_profile_selector() -> dict[str, object]:
         st.error("No profiles found. Add profiles/default/profile.json or a local profile.")
         st.stop()
 
-    st.subheader("Candidate Profile")
     has_local_profile = any(bool(profile.get("is_local")) for profile in profiles)
-    st.caption(
-        "Demo profiles are committed examples for testing. Private local profiles "
-        "live under local_profiles/ and are ignored by Git."
-    )
-    st.caption(
-        "The app does not use ChatGPT memory. Profile facts are matched "
-        "deterministically from the selected local files."
-    )
+    st.caption("Demo profiles are safe examples. Private profiles live under ignored local_profiles/.")
+    st.caption("No ChatGPT memory is used; profile facts are matched deterministically from local files.")
     profile_options = {
         _format_profile_label(profile): profile
         for profile in profiles
@@ -2507,13 +2757,19 @@ def _show_profile_selector() -> dict[str, object]:
     profile = profile_options[selected_label]
 
     if profile.get("is_default") and not profile.get("is_local"):
-        st.info(
-            "Using a demo profile. You can still try the app now; create a private "
-            "local profile later when you want real resume details."
+        st.markdown(
+            status_badge_html("needs-review", "Demo profile")
+            + " Using safe example data. Create a private local profile when you want real resume details.",
+            unsafe_allow_html=True,
         )
     elif profile.get("is_local"):
-        st.success("Using an ignored local profile.")
+        st.markdown(
+            status_badge_html("looks-good", "Private local profile")
+            + " Using files under ignored local_profiles/.",
+            unsafe_allow_html=True,
+        )
     if not has_local_profile:
+        st.caption("No private profile found yet. You can keep testing with the demo profile.")
         with st.expander("Add a private local profile later"):
             st.caption(
                 "Optional: demo profiles are safe for testing. For real applications, "

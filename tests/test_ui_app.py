@@ -13,6 +13,7 @@ from ui_app import (
     clean_job_posting_text,
     clean_imported_job_text,
     default_profile_index,
+    detected_detail_chips,
     _evidence_suggestion_counts,
     _evidence_requirements,
     example_job_posting_text,
@@ -20,9 +21,13 @@ from ui_app import (
     extract_uploaded_job_text,
     fetch_url_text,
     _find_duplicate_saved_packets,
+    html_list,
     extract_job_url,
+    job_empty_state_text,
     job_text_from_upload_bytes,
     packet_next_actions,
+    packet_summary_card_data,
+    packet_summary_card_html,
     read_uploaded_job_file,
     _recommendation_guidance,
     _requirement_slug,
@@ -34,6 +39,8 @@ from ui_app import (
     _suggest_evidence_answers,
     _suggest_evidence_for_requirement,
     summarize_job_input_quality,
+    status_badge_html,
+    step_card_html,
     top_packet_review_items,
     top_packet_supported_items,
     welcome_steps,
@@ -100,6 +107,80 @@ def test_example_job_posting_text_is_generic_and_support_oriented() -> None:
     assert "Microsoft 365" in text
     assert "leslie" not in text.lower()
     assert "password" not in text.lower()
+
+
+def test_status_badge_html_includes_accessible_text_and_state_class() -> None:
+    ready = status_badge_html("looks-good", "Looks usable")
+    weak = status_badge_html("needs-review", "Needs more text")
+
+    assert "Looks usable" in ready
+    assert "success" in ready
+    assert "Needs more text" in weak
+    assert "warning" in weak
+
+
+def test_detected_detail_chips_skip_unknowns_and_escape_values() -> None:
+    chips = detected_detail_chips(
+        {
+            "title": "AI Developer",
+            "company": "Example <Studio>",
+            "work_mode": "Remote",
+            "location": "Unknown",
+        },
+        source_url="https://example.com/job",
+    )
+    text = " ".join(chips)
+
+    assert "AI Developer" in text
+    assert "Example &lt;Studio&gt;" in text
+    assert "Remote" in text
+    assert "https://example.com/job" in text
+    assert "Location" not in text
+
+
+def test_packet_summary_card_helpers_include_scan_targets(tmp_path) -> None:
+    packet = {
+        "decision_summary": {"next_action": "Verify evidence before applying."},
+        "evidence_summary": {
+            "supported_evidence": [{"requirement": "Python automation"}],
+            "partial_evidence": [],
+            "missing_proof": [{"requirement": "Production ML"}],
+            "needs_verification": [],
+        },
+        "missing_proof_actions": ["Production ML: verify before claiming."],
+    }
+    data = packet_summary_card_data(
+        {"title": "AI Developer", "company": "Example Studio"},
+        {"score": 78, "recommendation": "Maybe"},
+        packet,
+        tmp_path,
+        {"folder_path": "applications/default/example"},
+    )
+    html = packet_summary_card_html(data)
+
+    assert data["supported"] == ["Python automation"]
+    assert data["review"] == ["Production ML"]
+    assert "AI Developer" in html
+    assert "78/100" in html
+    assert "Maybe" in html
+    assert "Python automation" in html
+    assert "Production ML" in html
+    assert "applications/default/example" in html
+
+
+def test_empty_state_and_step_card_text_are_plain_and_local() -> None:
+    empty_text = job_empty_state_text()
+    card = step_card_html("Step 2: Add job posting", "Paste locally.")
+
+    assert "Paste the whole job page here" in empty_text
+    assert ".html" in empty_text
+    assert "Step 2: Add job posting" in card
+    assert "Paste locally." in card
+
+
+def test_html_list_escapes_items_and_handles_empty() -> None:
+    assert "None." in html_list([])
+    assert "&lt;verify&gt;" in html_list(["<verify>"])
 
 
 def test_packet_start_here_items_summarize_supported_and_review_items() -> None:

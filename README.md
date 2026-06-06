@@ -88,8 +88,8 @@ role-specific guidance. It does not write real saved packets.
 
 ## Streamlit UI
 
-The UI is the easiest way to use the full workflow. The main screen is a simple
-three-step flow:
+The UI is the easiest way to use the full workflow. The app opens as a calm
+`Job Packet Studio` with a guided three-step flow:
 
 1. Choose a profile.
 2. Paste or upload a job posting.
@@ -107,8 +107,8 @@ optional and hidden in an expander.
 
 The default action is `Generate application packet`. That one button parses the
 posting, scores the fit, suggests evidence from the selected profile, and builds
-local draft materials. Review the compact result first, then open the detailed
-drafts below it.
+local draft materials. Review the compact summary card first, then open the
+detailed draft tabs below it.
 
 ## Fastest Way To Add A Job Posting
 
