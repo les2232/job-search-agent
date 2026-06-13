@@ -487,6 +487,11 @@ def test_saved_packet_table_row_reads_like_application_queue() -> None:
 def test_review_section_content_prefers_saved_file_and_falls_back() -> None:
     sections = [
         {
+            "key": "packet_index",
+            "exists": True,
+            "content": "# Application Packet Review Index\n\n- [Tailored resume draft](tailored_resume.md)",
+        },
+        {
             "key": "tailored_resume",
             "exists": True,
             "content": "# Tailored Resume Draft\n\nSaved file draft.",
@@ -501,12 +506,16 @@ def test_review_section_content_prefers_saved_file_and_falls_back() -> None:
     assert _review_section_content(sections, "tailored_resume", "packet fallback") == (
         "# Tailored Resume Draft\n\nSaved file draft."
     )
+    assert _review_section_content(sections, "packet_index", "") == (
+        "# Application Packet Review Index\n\n- [Tailored resume draft](tailored_resume.md)"
+    )
     assert _review_section_content(sections, "cover_letter_draft", "packet fallback") == (
         "packet fallback"
     )
     assert _review_section_content([], "tailored_resume", "packet fallback") == (
         "packet fallback"
     )
+    assert _review_section_content([], "packet_index", "") == ""
 
 
 def test_saved_review_sections_uses_loaded_sections_without_rereading() -> None:

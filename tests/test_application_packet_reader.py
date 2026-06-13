@@ -154,6 +154,10 @@ def test_load_saved_application_packet_reads_packet_json(tmp_path: Path) -> None
         "# Tailored Resume Draft\n\nReviewable draft.",
         encoding="utf-8",
     )
+    (folder_path / "packet_index.md").write_text(
+        "# Application Packet Review Index\n\n- [Tailored resume draft](tailored_resume.md)",
+        encoding="utf-8",
+    )
 
     packet = load_saved_application_packet(folder_path)
 
@@ -161,8 +165,10 @@ def test_load_saved_application_packet_reads_packet_json(tmp_path: Path) -> None
     assert packet["summary"]["score"] == 85
     assert packet["application_tracking"]["status"] == "Tailoring"
     assert packet["application_packet"]["apply_recommendation"] == "Apply after tailoring."
-    assert packet["review_sections"][0]["key"] == "tailored_resume"
-    assert packet["review_sections"][0]["content"].startswith("# Tailored Resume Draft")
+    assert packet["review_sections"][0]["key"] == "packet_index"
+    assert packet["review_sections"][0]["content"].startswith("# Application Packet Review Index")
+    assert packet["review_sections"][1]["key"] == "tailored_resume"
+    assert packet["review_sections"][1]["content"].startswith("# Tailored Resume Draft")
 
 
 def test_load_saved_packet_review_sections_reads_known_files_in_order(tmp_path: Path) -> None:
@@ -175,6 +181,10 @@ def test_load_saved_packet_review_sections_reads_known_files_in_order(tmp_path: 
         "# Tailored Resume Draft\n\nReview every claim.",
         encoding="utf-8",
     )
+    (folder_path / "packet_index.md").write_text(
+        "# Application Packet Review Index",
+        encoding="utf-8",
+    )
     (folder_path / "cover_letter_draft.md").write_text(
         "# Cover Letter Draft",
         encoding="utf-8",
@@ -183,17 +193,20 @@ def test_load_saved_packet_review_sections_reads_known_files_in_order(tmp_path: 
     sections = load_saved_packet_review_sections(folder_path)
 
     assert [section["key"] for section in sections[:4]] == [
+        "packet_index",
         "tailored_resume",
         "resume_tailoring_notes",
         "cover_letter_draft",
-        "recruiter_message",
     ]
-    assert sections[0]["label"] == "Tailored Resume Draft"
-    assert sections[0]["filename"] == "tailored_resume.md"
+    assert sections[0]["label"] == "Application Packet Review Index"
+    assert sections[0]["filename"] == "packet_index.md"
     assert sections[0]["exists"] is True
-    assert "Review every claim" in sections[0]["content"]
-    assert sections[2]["exists"] is True
-    assert sections[2]["content"] == "# Cover Letter Draft"
+    assert sections[1]["label"] == "Tailored Resume Draft"
+    assert sections[1]["filename"] == "tailored_resume.md"
+    assert sections[1]["exists"] is True
+    assert "Review every claim" in sections[1]["content"]
+    assert sections[3]["exists"] is True
+    assert sections[3]["content"] == "# Cover Letter Draft"
 
 
 def test_load_saved_packet_review_sections_handles_missing_tailored_resume(
@@ -206,8 +219,12 @@ def test_load_saved_packet_review_sections_handles_missing_tailored_resume(
     )
 
     sections = load_saved_packet_review_sections(folder_path)
-    tailored_resume = sections[0]
+    index = sections[0]
+    tailored_resume = sections[1]
 
+    assert index["key"] == "packet_index"
+    assert index["exists"] is False
+    assert index["content"] == ""
     assert tailored_resume["key"] == "tailored_resume"
     assert tailored_resume["exists"] is False
     assert tailored_resume["content"] == ""

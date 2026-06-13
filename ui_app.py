@@ -2728,6 +2728,7 @@ def _show_saved_packet_details(packet: object, review_sections: object = None) -
     st.subheader("Packet Details")
     st.write(packet.get("positioning_summary", "No positioning summary found."))
     st.info(str(packet.get("apply_recommendation", "No apply recommendation found.")))
+    _show_saved_packet_index(review_sections)
     with st.expander("Tailored resume draft", expanded=True):
         st.caption(
             "Reviewable Markdown draft. Check every claim before using it in an application."
@@ -2758,6 +2759,17 @@ def _show_saved_packet_details(packet: object, review_sections: object = None) -
         st.text(str(packet.get("recruiter_message", "")))
     _show_packet_list("Application checklist", packet.get("application_checklist"))
     _show_packet_list("Risk notes", packet.get("risk_notes"))
+
+
+def _show_saved_packet_index(review_sections: object) -> None:
+    index_content = _review_section_content(review_sections, "packet_index")
+    if not index_content:
+        st.caption("Start with packet_index.md when it is present in the saved packet folder.")
+        return
+
+    with st.expander("Packet review index", expanded=True):
+        st.caption("Start with packet_index.md for the recommended saved-folder review order.")
+        st.markdown(index_content)
 
 
 def _review_section_content(

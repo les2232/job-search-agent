@@ -45,6 +45,7 @@ SORT_OPTIONS = [
     "Title",
 ]
 REVIEW_SECTION_FILES = [
+    ("packet_index", "Application Packet Review Index", "packet_index.md"),
     ("tailored_resume", "Tailored Resume Draft", "tailored_resume.md"),
     ("resume_tailoring_notes", "Resume Tailoring Notes", "resume_tailoring_notes.md"),
     ("cover_letter_draft", "Cover Letter Draft", "cover_letter_draft.md"),
