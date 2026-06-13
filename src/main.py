@@ -9,6 +9,9 @@ from application_packet_reader import list_saved_application_packets
 from application_packet_reader import filter_saved_application_packets
 from application_packet_reader import get_today_application_queue
 from application_packet_reader import update_application_tracking
+from application_packet_validator import OPTIONAL_PACKET_FILES
+from application_packet_validator import REQUIRED_PACKET_FILES
+from application_packet_validator import validate_saved_packet_folder
 from application_packet_writer import save_application_packet
 from job_parser import parse_job_text
 from job_scorer import score_job
@@ -48,6 +51,8 @@ def main(argv: list[str] | None = None, jobs_csv_path: Path = JOBS_CSV_PATH) -> 
         return update_packet_status_command(args[1:])
     if args and args[0] == "--today":
         return today_command(args[1:], APPLICATIONS_DIR)
+    if args and args[0] == "--validate-packet":
+        return validate_packet_command(args[1:])
 
     include_packet = "--packet" in args
     save_packet = "--save-packet" in args
@@ -341,6 +346,16 @@ def today_command(args: list[str], applications_dir: Path) -> int:
     return 0
 
 
+def validate_packet_command(args: list[str]) -> int:
+    if len(args) != 1:
+        print("Error: Use python .\\src\\main.py --validate-packet <saved-folder>")
+        return 1
+
+    result = validate_saved_packet_folder(Path(args[0]))
+    print_saved_packet_validation(result)
+    return 0 if result["is_valid"] else 1
+
+
 def generate_application_command(args: list[str]) -> int:
     if len(args) != 3 or args[1] != "--resume":
         print(
@@ -554,6 +569,43 @@ def print_saved_packet_summary(save_result: dict[str, object]) -> None:
     if isinstance(output_paths, dict):
         for output_path in output_paths.values():
             print(f"- {output_path}")
+
+
+def print_saved_packet_validation(result: dict[str, object]) -> None:
+    present_files = set(result.get("present_files", []))
+    missing_required = result.get("missing_required_files")
+    missing_optional = result.get("missing_optional_files")
+    warnings = result.get("warnings")
+
+    print(f"Saved packet validation: {result.get('packet_path')}")
+    print(f"Status: {'valid' if result.get('is_valid') else 'invalid'}")
+    print()
+    print("Required files:")
+    for filename in REQUIRED_PACKET_FILES:
+        print(f"- {filename}: {_file_status(filename, present_files)}")
+    print()
+    print("Optional files:")
+    for filename in OPTIONAL_PACKET_FILES:
+        print(f"- {filename}: {_file_status(filename, present_files)}")
+    if missing_required:
+        print()
+        print("Missing required files:")
+        for filename in missing_required:
+            print(f"- {filename}")
+    if missing_optional:
+        print()
+        print("Missing optional files:")
+        for filename in missing_optional:
+            print(f"- {filename}")
+    if warnings:
+        print()
+        print("Warnings:")
+        for warning in warnings:
+            print(f"- {warning}")
+
+
+def _file_status(filename: str, present_files: set[object]) -> str:
+    return "present" if filename in present_files else "missing"
 
 
 def _print_today_group(label: str, applications: list[dict[str, object]]) -> None:
