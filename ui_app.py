@@ -30,6 +30,7 @@ from application_packet_reader import (
     get_today_application_queue,
     list_saved_application_packets,
     load_saved_application_packet,
+    load_saved_packet_review_sections,
     sort_saved_application_packets,
     update_application_tracking,
 )
@@ -2010,6 +2011,7 @@ def _show_packet_preview(
     packet: dict[str, object],
     score_details: dict[str, object],
     applications_dir: Path | None = None,
+    review_sections: object = None,
 ) -> None:
     st.subheader("Packet Draft Preview")
     st.caption("These are local drafts. Review every claim before sending anything to an employer.")
@@ -2037,7 +2039,16 @@ def _show_packet_preview(
         _show_plain_list(packet.get("resume_focus_areas"))
         _show_resume_strategy(packet)
     with preview_tabs[1]:
-        st.markdown(str(packet.get("tailored_resume_draft", "")))
+        st.caption(
+            "Reviewable Markdown draft. Check every claim before using it in an application."
+        )
+        st.markdown(
+            _review_section_content(
+                review_sections,
+                "tailored_resume",
+                str(packet.get("tailored_resume_draft", "")),
+            )
+        )
     with preview_tabs[2]:
         st.text(str(packet.get("cover_letter_draft", "")))
     with preview_tabs[3]:
@@ -2208,6 +2219,7 @@ def _show_saved_packet_review(
     _show_packet_preview(
         packet_details["application_packet"],
         packet_details["score_summary"],
+        review_sections=_saved_review_sections(packet_details),
     )
 
 
@@ -2535,7 +2547,10 @@ def _show_saved_applications_tab(
 
     st.caption(f"Saved folder: {packet_details['folder_path']}")
     _show_saved_packet_status_controls(packet_details, key_prefix="advanced_saved_status")
-    _show_saved_packet_details(packet_details["application_packet"])
+    _show_saved_packet_details(
+        packet_details["application_packet"],
+        _saved_review_sections(packet_details),
+    )
 
 
 def _show_saved_application_metrics(saved_packets: list[dict[str, object]]) -> None:
@@ -2705,7 +2720,7 @@ def _show_saved_packet_status_controls(
             st.warning(result["message"])
 
 
-def _show_saved_packet_details(packet: object) -> None:
+def _show_saved_packet_details(packet: object, review_sections: object = None) -> None:
     if not isinstance(packet, dict):
         st.info("No saved packet details were found.")
         return
@@ -2713,6 +2728,17 @@ def _show_saved_packet_details(packet: object) -> None:
     st.subheader("Packet Details")
     st.write(packet.get("positioning_summary", "No positioning summary found."))
     st.info(str(packet.get("apply_recommendation", "No apply recommendation found.")))
+    with st.expander("Tailored resume draft", expanded=True):
+        st.caption(
+            "Reviewable Markdown draft. Check every claim before using it in an application."
+        )
+        st.markdown(
+            _review_section_content(
+                review_sections,
+                "tailored_resume",
+                str(packet.get("tailored_resume_draft", "")),
+            )
+        )
     _show_packet_list("Resume focus areas", packet.get("resume_focus_areas"), expanded=True)
     _show_packet_list(
         "Suggested resume bullets",
@@ -2732,6 +2758,33 @@ def _show_saved_packet_details(packet: object) -> None:
         st.text(str(packet.get("recruiter_message", "")))
     _show_packet_list("Application checklist", packet.get("application_checklist"))
     _show_packet_list("Risk notes", packet.get("risk_notes"))
+
+
+def _review_section_content(
+    review_sections: object,
+    key: str,
+    fallback: str = "",
+) -> str:
+    if not isinstance(review_sections, list):
+        return fallback
+    for section in review_sections:
+        if not isinstance(section, dict):
+            continue
+        if section.get("key") == key and section.get("exists"):
+            content = section.get("content")
+            if isinstance(content, str) and content.strip():
+                return content
+    return fallback
+
+
+def _saved_review_sections(packet_details: dict[str, object]) -> list[dict[str, object]]:
+    sections = packet_details.get("review_sections")
+    if isinstance(sections, list):
+        return sections
+    folder_path = packet_details.get("folder_path")
+    if isinstance(folder_path, Path):
+        return load_saved_packet_review_sections(folder_path)
+    return []
 
 
 def _show_profile_selector() -> dict[str, object]:

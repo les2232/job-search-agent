@@ -44,6 +44,15 @@ SORT_OPTIONS = [
     "Company",
     "Title",
 ]
+REVIEW_SECTION_FILES = [
+    ("tailored_resume", "Tailored Resume Draft", "tailored_resume.md"),
+    ("resume_tailoring_notes", "Resume Tailoring Notes", "resume_tailoring_notes.md"),
+    ("cover_letter_draft", "Cover Letter Draft", "cover_letter_draft.md"),
+    ("recruiter_message", "Recruiter Message", "recruiter_message.txt"),
+    ("application_checklist", "Application Checklist", "application_checklist.md"),
+    ("job_summary", "Job Summary", "job_summary.md"),
+    ("score_explanation", "Score Explanation", "score_explanation.md"),
+]
 
 
 def list_saved_application_packets(
@@ -243,7 +252,35 @@ def load_saved_application_packet(packet_folder: str | Path) -> dict[str, object
         "job_metadata": _dict_value(payload.get("job_metadata")),
         "score_summary": _dict_value(payload.get("score_summary")),
         "application_packet": _dict_value(payload.get("application_packet")),
+        "review_sections": load_saved_packet_review_sections(folder_path),
     }
+
+
+def load_saved_packet_review_sections(packet_folder: str | Path) -> list[dict[str, object]]:
+    """Return saved packet review files in a stable order."""
+    folder_path = Path(packet_folder)
+    sections = []
+    for key, label, filename in REVIEW_SECTION_FILES:
+        path = folder_path / filename
+        content = ""
+        exists = path.exists()
+        if exists:
+            try:
+                content = path.read_text(encoding="utf-8")
+            except OSError:
+                content = ""
+                exists = False
+        sections.append(
+            {
+                "key": key,
+                "label": label,
+                "filename": filename,
+                "path": path,
+                "exists": exists,
+                "content": content,
+            }
+        )
+    return sections
 
 
 def update_application_status(

@@ -10,6 +10,7 @@ from application_packet_reader import (
     get_today_application_queue,
     list_saved_application_packets,
     load_saved_application_packet,
+    load_saved_packet_review_sections,
     sort_saved_application_packets,
     update_application_status,
     update_application_tracking,
@@ -149,6 +150,10 @@ def test_load_saved_application_packet_reads_packet_json(tmp_path: Path) -> None
         "2026-05-28_example-analytics-studio_junior-python-analyst",
         _packet_payload(),
     )
+    (folder_path / "tailored_resume.md").write_text(
+        "# Tailored Resume Draft\n\nReviewable draft.",
+        encoding="utf-8",
+    )
 
     packet = load_saved_application_packet(folder_path)
 
@@ -156,6 +161,56 @@ def test_load_saved_application_packet_reads_packet_json(tmp_path: Path) -> None
     assert packet["summary"]["score"] == 85
     assert packet["application_tracking"]["status"] == "Tailoring"
     assert packet["application_packet"]["apply_recommendation"] == "Apply after tailoring."
+    assert packet["review_sections"][0]["key"] == "tailored_resume"
+    assert packet["review_sections"][0]["content"].startswith("# Tailored Resume Draft")
+
+
+def test_load_saved_packet_review_sections_reads_known_files_in_order(tmp_path: Path) -> None:
+    folder_path = _write_packet(
+        tmp_path,
+        "2026-05-28_example-analytics-studio_junior-python-analyst",
+        _packet_payload(),
+    )
+    (folder_path / "tailored_resume.md").write_text(
+        "# Tailored Resume Draft\n\nReview every claim.",
+        encoding="utf-8",
+    )
+    (folder_path / "cover_letter_draft.md").write_text(
+        "# Cover Letter Draft",
+        encoding="utf-8",
+    )
+
+    sections = load_saved_packet_review_sections(folder_path)
+
+    assert [section["key"] for section in sections[:4]] == [
+        "tailored_resume",
+        "resume_tailoring_notes",
+        "cover_letter_draft",
+        "recruiter_message",
+    ]
+    assert sections[0]["label"] == "Tailored Resume Draft"
+    assert sections[0]["filename"] == "tailored_resume.md"
+    assert sections[0]["exists"] is True
+    assert "Review every claim" in sections[0]["content"]
+    assert sections[2]["exists"] is True
+    assert sections[2]["content"] == "# Cover Letter Draft"
+
+
+def test_load_saved_packet_review_sections_handles_missing_tailored_resume(
+    tmp_path: Path,
+) -> None:
+    folder_path = _write_packet(
+        tmp_path,
+        "2026-05-28_example-analytics-studio_junior-python-analyst",
+        _packet_payload(),
+    )
+
+    sections = load_saved_packet_review_sections(folder_path)
+    tailored_resume = sections[0]
+
+    assert tailored_resume["key"] == "tailored_resume"
+    assert tailored_resume["exists"] is False
+    assert tailored_resume["content"] == ""
 
 
 def test_saved_application_summaries_do_not_include_raw_job_text(tmp_path: Path) -> None:
