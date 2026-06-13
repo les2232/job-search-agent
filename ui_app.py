@@ -885,13 +885,21 @@ def _show_compact_packet_result(
     )
 
     save_location = packet_save_location(applications_dir, saved_packet)
-    st.caption(f"Saved packet location: {save_location}")
+    st.caption(saved_packet_folder_note(save_location))
 
 
 def packet_save_location(applications_dir: Path, saved_packet: object) -> str:
     if isinstance(saved_packet, dict):
         return str(saved_packet.get("folder_path") or applications_dir)
     return str(applications_dir)
+
+
+def saved_packet_folder_note(folder_path: object) -> str:
+    path_text = str(folder_path or "applications/<profile_id>/<saved-folder>")
+    return (
+        f"Saved packet folder: {path_text}. "
+        "Start with packet_index.md for the recommended review order."
+    )
 
 
 def packet_summary_card_data(
@@ -2214,7 +2222,7 @@ def _show_saved_packet_review(
         st.warning("This saved packet could not be loaded.")
         return
 
-    st.caption(f"Saved folder: {packet_details['folder_path']}")
+    st.caption(saved_packet_folder_note(packet_details["folder_path"]))
     _show_saved_packet_status_controls(packet_details, key_prefix="guided_saved_status")
     _show_packet_preview(
         packet_details["application_packet"],
@@ -2545,7 +2553,7 @@ def _show_saved_applications_tab(
         st.warning("This saved packet could not be loaded.")
         return
 
-    st.caption(f"Saved folder: {packet_details['folder_path']}")
+    st.caption(saved_packet_folder_note(packet_details["folder_path"]))
     _show_saved_packet_status_controls(packet_details, key_prefix="advanced_saved_status")
     _show_saved_packet_details(
         packet_details["application_packet"],

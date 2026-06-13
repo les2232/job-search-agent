@@ -33,6 +33,7 @@ from ui_app import (
     _requirement_slug,
     _review_section_content,
     _saved_review_sections,
+    saved_packet_folder_note,
     local_profile_setup_steps,
     packet_start_here_items,
     _saved_packet_table_row,
@@ -482,6 +483,21 @@ def test_saved_packet_table_row_reads_like_application_queue() -> None:
         "Next action date",
     ]
     assert row["Job"] == "Full-Stack Developer (2 versions)"
+
+
+def test_saved_packet_folder_note_points_to_index() -> None:
+    note = saved_packet_folder_note("applications/default/2026-06-13_example_role")
+
+    assert "Saved packet folder: applications/default/2026-06-13_example_role." in note
+    assert "Start with packet_index.md" in note
+    assert "recommended review order" in note
+
+
+def test_saved_packet_folder_note_handles_missing_path() -> None:
+    note = saved_packet_folder_note("")
+
+    assert "applications/<profile_id>/<saved-folder>" in note
+    assert "packet_index.md" in note
 
 
 def test_review_section_content_prefers_saved_file_and_falls_back() -> None:
