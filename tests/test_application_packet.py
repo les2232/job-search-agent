@@ -777,6 +777,41 @@ def test_evidence_answers_drive_decision_summary_and_missing_proof() -> None:
     assert "LLM or large language model workflow experience" in tailored_resume
 
 
+def test_tailored_resume_uses_reviewable_builder_and_preserves_details() -> None:
+    packet = generate_application_packet(
+        _arrivia_score_result(),
+        PROOF_LIBRARY_PROFILE_TEXT,
+        evidence_answers={
+            "Python scripting/development": {"status": "Strong evidence", "notes": "Python projects."},
+            "API integration": {"status": "Some evidence", "notes": "API projects."},
+        },
+    )
+    tailored_resume = packet["tailored_resume_draft"]
+
+    assert tailored_resume.startswith("# Tailored Resume Draft")
+    assert "Human review required" in tailored_resume
+    assert "## Target Role Alignment" in tailored_resume
+    assert "## Matched Requirements" in tailored_resume
+    assert "## Strong Evidence Bullets" in tailored_resume
+    assert "Built a local-first Python and Streamlit application" in tailored_resume
+    assert "## Resume Summary Draft" in tailored_resume
+    assert "## Internal Review Notes" in tailored_resume
+
+
+def test_tailored_resume_handles_missing_profile_evidence_safely() -> None:
+    packet = generate_application_packet(_arrivia_score_result(), "")
+    tailored_resume = packet["tailored_resume_draft"]
+    strong_section = tailored_resume.split("## Strong Evidence Bullets", 1)[1].split(
+        "## Gaps or Weak Matches",
+        1,
+    )[0]
+
+    assert "No verified resume bullets were selected." in strong_section
+    assert "Python scripting/development" in tailored_resume
+    assert "Built a local-first Python tool" not in tailored_resume
+    assert "production AI agent" not in tailored_resume.lower()
+
+
 def test_tailored_resume_does_not_claim_unsupported_fei_requirements() -> None:
     packet = generate_application_packet(
         _fei_score_result(),

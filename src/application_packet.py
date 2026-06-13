@@ -3,6 +3,9 @@
 import re
 
 from profile_manager import parse_proof_blocks
+from resume_evidence import build_profile_evidence
+from resume_tailoring import build_tailoring_plan
+from tailored_resume_builder import build_tailored_resume_draft
 
 
 REVIEW_WARNING = (
@@ -97,6 +100,11 @@ def generate_application_packet(
         job_requirements,
         matched_keywords,
     )
+    tailoring_plan = _build_tailoring_plan(
+        job_requirements,
+        profile_text,
+        proof_blocks,
+    )
 
     return {
         "positioning_summary": _build_positioning_summary(
@@ -155,6 +163,7 @@ def generate_application_packet(
             missing_proof_actions,
             profile_text,
             proof_blocks,
+            tailoring_plan,
         ),
         "recruiter_message": _build_recruiter_message(
             display_role_label,
@@ -445,6 +454,28 @@ def _build_evidence_summary(
         else:
             summary["needs_verification"].append(item)
     return summary
+
+
+def _build_tailoring_plan(
+    job_requirements: dict[str, object],
+    profile_text: str | None,
+    proof_blocks: list[dict[str, object]],
+) -> dict[str, object]:
+    requirements = _tailoring_plan_requirements(job_requirements)
+    evidence = build_profile_evidence(
+        {
+            "proof_blocks": proof_blocks,
+            "resume_text": profile_text or "",
+        }
+    )
+    return build_tailoring_plan(requirements, evidence)
+
+
+def _tailoring_plan_requirements(job_requirements: dict[str, object]) -> list[str]:
+    requirements = []
+    for key in ["hard_requirements", "soft_requirements", "experience_requirements"]:
+        requirements.extend(_requirement_values(job_requirements, key))
+    return _display_requirements(_dedupe(requirements))
 
 
 def _covered_requirement_note(requirement: str) -> str:
@@ -854,6 +885,7 @@ def _build_tailored_resume_draft(
     missing_proof_actions: list[str],
     profile_text: str | None,
     proof_blocks: list[dict[str, object]],
+    tailoring_plan: dict[str, object],
 ) -> str:
     supported_items = evidence_summary["supported_evidence"] + evidence_summary["partial_evidence"]
     supported_requirements = [item["requirement"] for item in supported_items]
@@ -889,12 +921,13 @@ def _build_tailored_resume_draft(
         missing_requirements,
     )
 
-    return "\n".join(
+    reviewable_draft = build_tailored_resume_draft(
+        tailoring_plan,
+        base_resume=profile_text,
+    )["markdown"]
+
+    detailed_notes = "\n".join(
         [
-            "# Tailored Resume Draft",
-            "",
-            "Draft only. Review carefully before using. Remove unsupported claims.",
-            "",
             "## Target Role",
             "",
             f"- Role: {role_label}",
@@ -945,6 +978,7 @@ def _build_tailored_resume_draft(
             "",
         ]
     )
+    return reviewable_draft.rstrip() + "\n\n" + detailed_notes
 
 
 def _tailored_summary_draft(
