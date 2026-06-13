@@ -16,6 +16,17 @@ PACKET_FILENAMES = {
     "application_checklist": "application_checklist.md",
     "packet_json": "packet.json",
 }
+PACKET_INDEX_FILENAME = "packet_index.md"
+PACKET_REVIEW_ORDER = [
+    ("tailored_resume", "Tailored resume draft"),
+    ("resume_tailoring_notes", "Resume tailoring notes"),
+    ("cover_letter_draft", "Cover letter draft"),
+    ("recruiter_message", "Recruiter message"),
+    ("application_checklist", "Application checklist"),
+    ("job_summary", "Job summary"),
+    ("score_explanation", "Score explanation"),
+    ("packet_json", "Packet data"),
+]
 
 RAW_TEXT_KEYS = {
     "raw_text",
@@ -84,11 +95,44 @@ def save_application_packet(
         ),
         encoding="utf-8",
     )
+    output_paths["packet_index"] = folder_path / PACKET_INDEX_FILENAME
+    output_paths["packet_index"].write_text(
+        build_packet_review_index(output_paths),
+        encoding="utf-8",
+    )
 
     return {
         "folder_path": folder_path,
         "output_paths": output_paths,
     }
+
+
+def build_packet_review_index(output_paths: dict[str, Path]) -> str:
+    """Build a deterministic Markdown index for generated packet files."""
+    review_items = []
+    for key, label in PACKET_REVIEW_ORDER:
+        path = output_paths.get(key)
+        if isinstance(path, Path) and path.exists():
+            review_items.append(f"- [{label}]({path.name})")
+
+    if not review_items:
+        review_items.append("- No generated packet files were found.")
+
+    return "\n".join(
+        [
+            "# Application Packet Review Index",
+            "",
+            (
+                "Generated drafts must be reviewed before use. Confirm every "
+                "resume, cover letter, and outreach claim is true and supported."
+            ),
+            "",
+            "## Recommended Review Order",
+            "",
+            *review_items,
+            "",
+        ]
+    )
 
 
 def build_packet_folder_name(

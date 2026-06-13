@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 from application_packet_writer import (
+    build_packet_review_index,
     build_packet_folder_name,
     safe_slug,
     save_application_packet,
@@ -177,6 +178,54 @@ def test_save_application_packet_writes_expected_files(tmp_path: Path) -> None:
     assert output_paths["recruiter_message"].exists()
     assert output_paths["application_checklist"].exists()
     assert output_paths["packet_json"].exists()
+    assert output_paths["packet_index"].exists()
+
+
+def test_save_application_packet_writes_review_index_in_stable_order(tmp_path: Path) -> None:
+    result = save_application_packet(
+        _packet(),
+        _score_result(),
+        tmp_path,
+        packet_date=date(2026, 5, 28),
+    )
+
+    index = result["output_paths"]["packet_index"].read_text(encoding="utf-8")
+    review_lines = [line for line in index.splitlines() if line.startswith("- [")]
+
+    assert index.startswith("# Application Packet Review Index")
+    assert "Generated drafts must be reviewed before use." in index
+    assert review_lines == [
+        "- [Tailored resume draft](tailored_resume.md)",
+        "- [Resume tailoring notes](resume_tailoring_notes.md)",
+        "- [Cover letter draft](cover_letter_draft.md)",
+        "- [Recruiter message](recruiter_message.txt)",
+        "- [Application checklist](application_checklist.md)",
+        "- [Job summary](job_summary.md)",
+        "- [Score explanation](score_explanation.md)",
+        "- [Packet data](packet.json)",
+    ]
+
+
+def test_packet_review_index_helper_is_deterministic_and_skips_missing_files(
+    tmp_path: Path,
+) -> None:
+    tailored_resume = tmp_path / "tailored_resume.md"
+    packet_json = tmp_path / "packet.json"
+    tailored_resume.write_text("# Tailored Resume Draft", encoding="utf-8")
+    packet_json.write_text("{}", encoding="utf-8")
+    output_paths = {
+        "packet_json": packet_json,
+        "tailored_resume": tailored_resume,
+        "cover_letter_draft": tmp_path / "missing_cover_letter.md",
+    }
+
+    first = build_packet_review_index(output_paths)
+    second = build_packet_review_index(dict(reversed(list(output_paths.items()))))
+
+    assert first == second
+    assert first.splitlines()[6] == "- [Tailored resume draft](tailored_resume.md)"
+    assert "- [Cover letter draft]" not in first
+    assert "- [Packet data](packet.json)" in first
 
 
 def test_save_application_packet_uses_unknown_fallbacks(tmp_path: Path) -> None:
