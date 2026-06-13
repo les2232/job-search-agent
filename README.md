@@ -431,6 +431,7 @@ applications/<profile_id>/YYYY-MM-DD_company-slug_title-slug/
 Each saved packet includes:
 
 ```text
+packet_index.md
 job_summary.md
 score_explanation.md
 resume_tailoring_notes.md
@@ -442,6 +443,38 @@ packet.json
 ```
 
 Saved packets do not include the full raw job description.
+
+## Saved Packet Review Workflow
+
+Saved packet folders are review bundles, not ready-to-submit applications. Use
+them as local, deterministic drafts and confirm every claim before applying.
+
+Recommended workflow:
+
+1. Generate an application packet from the Streamlit app or CLI.
+2. Open the saved packet folder under `applications/<profile_id>/`.
+3. Start with `packet_index.md` for the recommended review order.
+4. Review `tailored_resume.md` before using any resume wording.
+5. Check supporting files when present: `resume_tailoring_notes.md`,
+   `cover_letter_draft.md`, `recruiter_message.txt`,
+   `application_checklist.md`, `job_summary.md`, `score_explanation.md`, and
+   `packet.json`.
+6. Validate the saved folder from PowerShell:
+
+```powershell
+python .\src\main.py --validate-packet "applications\<profile_id>\<saved-folder>"
+```
+
+The validator checks required review artifacts:
+
+- `packet_index.md`
+- `tailored_resume.md`
+- `packet.json`
+
+It reports missing optional files separately from missing required files. A
+valid folder only means the expected artifacts are present; it does not mean the
+drafts are accurate or ready to submit. Manually confirm all claims, dates,
+skills, project details, and experience before applying.
 
 ## Saved Applications
 
