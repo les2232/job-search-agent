@@ -52,6 +52,26 @@ python .\src\main.py .\data\sample_job.txt
 - call ChatGPT, external AI APIs, or ChatGPT memory
 - verify that every generated claim is true
 
+## Current Feature Map
+
+| Area | Module / Entry Point | What it does |
+| --- | --- | --- |
+| Job parsing | `src/job_parser.py` | Extracts job metadata from pasted or uploaded job text. |
+| Fit scoring | `src/job_scorer.py` | Produces deterministic fit signals, concerns, requirements, and explanations. |
+| Evidence adapter | `src/resume_evidence.py` | Normalizes profile, resume, and proof-library data into structured evidence items. |
+| Tailoring engine | `src/resume_tailoring.py` | Matches job requirements against evidence and identifies strengths, weak matches, and gaps. |
+| Resume draft builder | `src/tailored_resume_builder.py` | Builds a reviewable Markdown tailored resume draft from a tailoring plan. |
+| Packet generation | `src/application_packet.py` | Builds the full deterministic application packet from score, profile, and evidence data. |
+| Packet writing | `src/application_packet_writer.py` | Saves packet Markdown/JSON files and `packet_index.md` to local folders. |
+| Saved packet review | `src/application_packet_reader.py` | Loads saved packet summaries and review sections in deterministic order. |
+| Packet validation | `src/application_packet_validator.py` | Checks expected saved packet artifacts without modifying folders. |
+| CLI | `src/main.py` | Scores jobs, saves/list packets, tracks status, and validates folders with `--validate-packet`. |
+| UI | `ui_app.py` | Provides the Streamlit workflow for generating, saving, reviewing, and tracking packets. |
+
+All generated materials are intended for human review before use. The project
+favors deterministic local helpers over automatic submission or unsupported
+claims.
+
 ## Run the App on Windows
 
 From PowerShell:
