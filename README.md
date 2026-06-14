@@ -507,6 +507,12 @@ text block after saving or reviewing a packet. On Windows, copy that path and
 open the folder directly, then start with `packet_index.md` for the recommended
 review order.
 
+When a saved packet validates successfully, the Streamlit review UI also shows
+a `Download saved packet ZIP` button. The ZIP export packages the existing
+generated packet files from the saved folder; it does not regenerate or verify
+the accuracy of the draft content. Review the packet files manually before
+submitting or sharing them.
+
 ```powershell
 python .\src\main.py --validate-packet "applications\<profile_id>\<saved-folder>"
 ```
