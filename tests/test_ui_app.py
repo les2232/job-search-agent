@@ -33,6 +33,7 @@ from ui_app import (
     _requirement_slug,
     _review_section_content,
     _saved_review_sections,
+    saved_packet_folder_path,
     saved_packet_folder_note,
     local_profile_setup_steps,
     packet_start_here_items,
@@ -486,16 +487,20 @@ def test_saved_packet_table_row_reads_like_application_queue() -> None:
 
 
 def test_saved_packet_folder_note_points_to_index() -> None:
+    path = saved_packet_folder_path("applications/default/2026-06-13_example_role")
     note = saved_packet_folder_note("applications/default/2026-06-13_example_role")
 
+    assert path == "applications/default/2026-06-13_example_role"
     assert "Saved packet folder: applications/default/2026-06-13_example_role." in note
     assert "Start with packet_index.md" in note
     assert "recommended review order" in note
 
 
 def test_saved_packet_folder_note_handles_missing_path() -> None:
+    path = saved_packet_folder_path("")
     note = saved_packet_folder_note("")
 
+    assert path == "applications/<profile_id>/<saved-folder>"
     assert "applications/<profile_id>/<saved-folder>" in note
     assert "packet_index.md" in note
 
