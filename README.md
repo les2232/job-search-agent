@@ -461,6 +461,11 @@ Recommended workflow:
    `packet.json`.
 6. Validate the saved folder from PowerShell:
 
+The Streamlit UI also displays the saved packet folder path in a selectable
+text block after saving or reviewing a packet. On Windows, copy that path and
+open the folder directly, then start with `packet_index.md` for the recommended
+review order.
+
 ```powershell
 python .\src\main.py --validate-packet "applications\<profile_id>\<saved-folder>"
 ```
