@@ -34,6 +34,7 @@ from application_packet_reader import (
     sort_saved_application_packets,
     update_application_tracking,
 )
+from application_packet_validator import validate_saved_packet_folder
 from application_packet_writer import save_application_packet
 from job_parser import parse_job_text
 from job_packet_agent import run_job_packet_agent
@@ -906,9 +907,65 @@ def saved_packet_folder_path(folder_path: object) -> str:
     return str(folder_path or "applications/<profile_id>/<saved-folder>")
 
 
-def _show_saved_packet_folder_location(folder_path: object) -> None:
+def _show_saved_packet_folder_location(
+    folder_path: object,
+    validation_result: object = None,
+) -> None:
     st.caption(saved_packet_folder_note(folder_path))
     st.code(saved_packet_folder_path(folder_path), language="text")
+    if isinstance(validation_result, dict):
+        _show_saved_packet_validation(validation_result)
+
+
+def packet_validation_status_text(validation_result: dict[str, object]) -> str:
+    if validation_result.get("is_valid"):
+        return "Packet validation: valid"
+    return "Packet validation: needs attention"
+
+
+def packet_validation_required_text(validation_result: dict[str, object]) -> str:
+    present_files = _as_tuple_items(validation_result.get("present_files"))
+    found = [
+        filename
+        for filename in ["packet_index.md", "tailored_resume.md", "packet.json"]
+        if filename in present_files
+    ]
+    if not found:
+        return "Required files found: none"
+    return "Required files found: " + ", ".join(found)
+
+
+def packet_validation_missing_required_items(
+    validation_result: dict[str, object],
+) -> list[str]:
+    return _as_tuple_items(validation_result.get("missing_required_files"))
+
+
+def packet_validation_missing_optional_items(
+    validation_result: dict[str, object],
+) -> list[str]:
+    return _as_tuple_items(validation_result.get("missing_optional_files"))
+
+
+def _show_saved_packet_validation(validation_result: dict[str, object]) -> None:
+    status_text = packet_validation_status_text(validation_result)
+    required_text = packet_validation_required_text(validation_result)
+    missing_required = packet_validation_missing_required_items(validation_result)
+    missing_optional = packet_validation_missing_optional_items(validation_result)
+
+    if validation_result.get("is_valid"):
+        st.success(f"{status_text}. {required_text}.")
+    else:
+        st.warning(status_text)
+        if missing_required:
+            st.write("Missing required files:")
+            _show_plain_list(missing_required)
+        else:
+            st.write(required_text)
+
+    if missing_optional:
+        with st.expander("Missing optional packet files"):
+            _show_plain_list(missing_optional)
 
 
 def packet_summary_card_data(
@@ -2231,7 +2288,10 @@ def _show_saved_packet_review(
         st.warning("This saved packet could not be loaded.")
         return
 
-    _show_saved_packet_folder_location(packet_details["folder_path"])
+    _show_saved_packet_folder_location(
+        packet_details["folder_path"],
+        validate_saved_packet_folder(packet_details["folder_path"]),
+    )
     _show_saved_packet_status_controls(packet_details, key_prefix="guided_saved_status")
     _show_packet_preview(
         packet_details["application_packet"],
@@ -2562,7 +2622,10 @@ def _show_saved_applications_tab(
         st.warning("This saved packet could not be loaded.")
         return
 
-    _show_saved_packet_folder_location(packet_details["folder_path"])
+    _show_saved_packet_folder_location(
+        packet_details["folder_path"],
+        validate_saved_packet_folder(packet_details["folder_path"]),
+    )
     _show_saved_packet_status_controls(packet_details, key_prefix="advanced_saved_status")
     _show_saved_packet_details(
         packet_details["application_packet"],

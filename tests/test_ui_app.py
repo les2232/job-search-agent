@@ -26,6 +26,10 @@ from ui_app import (
     job_empty_state_text,
     job_text_from_upload_bytes,
     packet_next_actions,
+    packet_validation_missing_optional_items,
+    packet_validation_missing_required_items,
+    packet_validation_required_text,
+    packet_validation_status_text,
     packet_summary_card_data,
     packet_summary_card_html,
     read_uploaded_job_file,
@@ -503,6 +507,79 @@ def test_saved_packet_folder_note_handles_missing_path() -> None:
     assert path == "applications/<profile_id>/<saved-folder>"
     assert "applications/<profile_id>/<saved-folder>" in note
     assert "packet_index.md" in note
+
+
+def test_packet_validation_summary_reports_valid_required_files() -> None:
+    validation_result = {
+        "is_valid": True,
+        "present_files": [
+            "packet_index.md",
+            "tailored_resume.md",
+            "packet.json",
+            "cover_letter_draft.md",
+        ],
+        "missing_required_files": [],
+        "missing_optional_files": [],
+    }
+
+    assert packet_validation_status_text(validation_result) == "Packet validation: valid"
+    assert packet_validation_required_text(validation_result) == (
+        "Required files found: packet_index.md, tailored_resume.md, packet.json"
+    )
+    assert packet_validation_missing_required_items(validation_result) == []
+    assert packet_validation_missing_optional_items(validation_result) == []
+
+
+def test_packet_validation_summary_separates_missing_file_types() -> None:
+    validation_result = {
+        "is_valid": False,
+        "present_files": ["packet.json"],
+        "missing_required_files": ["packet_index.md", "tailored_resume.md"],
+        "missing_optional_files": ["cover_letter_draft.md"],
+    }
+
+    assert (
+        packet_validation_status_text(validation_result)
+        == "Packet validation: needs attention"
+    )
+    assert packet_validation_required_text(validation_result) == (
+        "Required files found: packet.json"
+    )
+    assert packet_validation_missing_required_items(validation_result) == [
+        "packet_index.md",
+        "tailored_resume.md",
+    ]
+    assert packet_validation_missing_optional_items(validation_result) == [
+        "cover_letter_draft.md"
+    ]
+
+
+def test_packet_validation_summary_handles_nonexistent_folder_result() -> None:
+    validation_result = {
+        "is_valid": False,
+        "present_files": [],
+        "missing_required_files": [
+            "packet_index.md",
+            "tailored_resume.md",
+            "packet.json",
+        ],
+        "missing_optional_files": [],
+        "warnings": ["Packet folder does not exist: applications/missing"],
+    }
+
+    assert (
+        packet_validation_status_text(validation_result)
+        == "Packet validation: needs attention"
+    )
+    assert packet_validation_required_text(validation_result) == (
+        "Required files found: none"
+    )
+    assert packet_validation_missing_required_items(validation_result) == [
+        "packet_index.md",
+        "tailored_resume.md",
+        "packet.json",
+    ]
+    assert packet_validation_missing_optional_items(validation_result) == []
 
 
 def test_review_section_content_prefers_saved_file_and_falls_back() -> None:
