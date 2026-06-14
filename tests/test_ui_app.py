@@ -30,6 +30,8 @@ from ui_app import (
     packet_validation_missing_required_items,
     packet_validation_required_text,
     packet_validation_status_text,
+    saved_packet_zip_download_enabled,
+    saved_packet_zip_filename,
     packet_summary_card_data,
     packet_summary_card_html,
     read_uploaded_job_file,
@@ -580,6 +582,22 @@ def test_packet_validation_summary_handles_nonexistent_folder_result() -> None:
         "packet.json",
     ]
     assert packet_validation_missing_optional_items(validation_result) == []
+
+
+def test_saved_packet_zip_download_is_enabled_only_for_valid_packets() -> None:
+    assert saved_packet_zip_download_enabled({"is_valid": True}) is True
+    assert saved_packet_zip_download_enabled({"is_valid": False}) is False
+    assert saved_packet_zip_download_enabled({}) is False
+
+
+def test_saved_packet_zip_filename_uses_safe_packet_folder_name() -> None:
+    assert (
+        saved_packet_zip_filename(
+            r"applications\default\2026-06-13 Example Role"
+        )
+        == "2026-06-13-Example-Role.zip"
+    )
+    assert saved_packet_zip_filename("") == "saved-folder.zip"
 
 
 def test_review_section_content_prefers_saved_file_and_falls_back() -> None:

@@ -34,6 +34,7 @@ from application_packet_reader import (
     sort_saved_application_packets,
     update_application_tracking,
 )
+from application_packet_export import build_saved_packet_zip
 from application_packet_validator import validate_saved_packet_folder
 from application_packet_writer import save_application_packet
 from job_parser import parse_job_text
@@ -915,6 +916,7 @@ def _show_saved_packet_folder_location(
     st.code(saved_packet_folder_path(folder_path), language="text")
     if isinstance(validation_result, dict):
         _show_saved_packet_validation(validation_result)
+        _show_saved_packet_zip_download(folder_path, validation_result)
 
 
 def packet_validation_status_text(validation_result: dict[str, object]) -> str:
@@ -947,6 +949,18 @@ def packet_validation_missing_optional_items(
     return _as_tuple_items(validation_result.get("missing_optional_files"))
 
 
+def saved_packet_zip_download_enabled(validation_result: dict[str, object]) -> bool:
+    return bool(validation_result.get("is_valid"))
+
+
+def saved_packet_zip_filename(folder_path: object) -> str:
+    folder_name = Path(saved_packet_folder_path(folder_path)).name
+    safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "-", folder_name).strip("-")
+    if not safe_name:
+        safe_name = "saved-packet"
+    return f"{safe_name}.zip"
+
+
 def _show_saved_packet_validation(validation_result: dict[str, object]) -> None:
     status_text = packet_validation_status_text(validation_result)
     required_text = packet_validation_required_text(validation_result)
@@ -966,6 +980,28 @@ def _show_saved_packet_validation(validation_result: dict[str, object]) -> None:
     if missing_optional:
         with st.expander("Missing optional packet files"):
             _show_plain_list(missing_optional)
+
+
+def _show_saved_packet_zip_download(
+    folder_path: object,
+    validation_result: dict[str, object],
+) -> None:
+    if not saved_packet_zip_download_enabled(validation_result):
+        return
+
+    try:
+        zip_bytes = build_saved_packet_zip(saved_packet_folder_path(folder_path))
+    except ValueError as error:
+        st.warning(str(error))
+        return
+
+    st.download_button(
+        "Download saved packet ZIP",
+        data=zip_bytes,
+        file_name=saved_packet_zip_filename(folder_path),
+        mime="application/zip",
+        key=f"saved_packet_zip_{saved_packet_zip_filename(folder_path)}",
+    )
 
 
 def packet_summary_card_data(
