@@ -72,6 +72,15 @@ All generated materials are intended for human review before use. The project
 favors deterministic local helpers over automatic submission or unsupported
 claims.
 
+## Developer Handoff
+
+- Standard test command: `python -m pytest --basetemp .pytest_tmp_codex`
+- End-to-end smoke check: `python scripts\smoke_packet_flow.py --fixture all`
+- Do not commit private/generated data from `local_profiles/`, `applications/`,
+  `data/jobs.csv`, or local resume/application drafts.
+- Generated packet drafts require human review before use.
+- Leave old stashes alone unless intentionally resuming that specific work.
+
 ## Run the App on Windows
 
 From PowerShell:
