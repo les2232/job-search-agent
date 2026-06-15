@@ -86,11 +86,10 @@ claims.
 Small future improvements that fit the current local-first, deterministic
 design:
 
-- Surface packet validation results in the saved packet review UI.
-- Add an optional export bundle for saved packet folders.
 - Improve evidence review so users can inspect which profile items support each
   tailored resume section.
-- Add a small sample/demo packet using non-private fixture data.
+- Add a tiny README/UI pointer from the saved packet workflow to the
+  non-private demo packet.
 - Polish the project overview for portfolio review.
 
 ## Run the App on Windows
