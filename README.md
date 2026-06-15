@@ -485,6 +485,10 @@ packet.json
 
 Saved packets do not include the full raw job description.
 
+For a non-private example of the saved packet folder shape, see
+`docs/demo_saved_packet/`. It uses fictional demo data only and is meant to show
+the review files without exposing real `applications/` content.
+
 ## Saved Packet Review Workflow
 
 Saved packet folders are review bundles, not ready-to-submit applications. Use

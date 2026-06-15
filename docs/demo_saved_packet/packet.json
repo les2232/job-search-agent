@@ -1,0 +1,39 @@
+{
+  "application_packet": {
+    "application_checklist": [
+      "Confirm every claim before use.",
+      "Replace demo evidence with verified personal evidence."
+    ],
+    "apply_recommendation": "Review",
+    "tailored_resume_draft": "# Tailored Resume Draft\n\nDemo content only."
+  },
+  "application_tracking": {
+    "applied_date": null,
+    "next_action_date": null,
+    "next_action_note": "",
+    "notes": "Demo packet only.",
+    "status": "Interested",
+    "status_updated_at": "2026-06-14T00:00:00"
+  },
+  "created_date": "2026-06-14",
+  "job_metadata": {
+    "company": "Example Company",
+    "location": "Remote",
+    "source_url": "",
+    "title": "Example Help Desk Technician",
+    "work_mode": "Remote"
+  },
+  "score_summary": {
+    "concerns": [
+      "Demo content only"
+    ],
+    "matched_keywords": [
+      "help desk",
+      "documentation",
+      "microsoft 365"
+    ],
+    "missing_keywords": [],
+    "recommendation": "Review",
+    "score": 82
+  }
+}
