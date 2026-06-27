@@ -1,4 +1,5 @@
 from ui_app import (
+    app_header_html,
     build_browser_capture_bookmarklet,
     browser_capture_bookmarklet_link_markdown,
     browser_capture_chrome_edge_steps,
@@ -54,6 +55,7 @@ from ui_app import (
     top_packet_review_items,
     top_packet_supported_items,
     welcome_steps,
+    workflow_strip_html,
 )
 
 
@@ -97,6 +99,28 @@ def test_welcome_steps_explain_local_reviewable_workflow() -> None:
     assert "reviewable packet" in text
     assert "Review every claim manually" in text
     assert "Everything stays local" in text
+
+
+def test_header_highlights_first_action_and_privacy_boundary() -> None:
+    header = app_header_html()
+
+    assert "Job Packet Studio" in header
+    assert "Paste a job posting, generate a local review packet, then decide manually." in header
+    assert "Local-first" in header
+    assert "no scraping" in header
+    assert "external AI API calls" in header
+    assert "auto-apply" in header
+
+
+def test_workflow_strip_shows_three_visible_steps() -> None:
+    strip = workflow_strip_html()
+
+    assert "Choose profile" in strip
+    assert "Paste or upload job" in strip
+    assert "Generate packet" in strip
+    assert "demo profile" in strip
+    assert "job text you chose to provide" in strip
+    assert "Review drafts" in strip
 
 
 def test_local_profile_setup_steps_keep_private_data_ignored() -> None:

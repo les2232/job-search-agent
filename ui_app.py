@@ -236,15 +236,16 @@ def app_style_css() -> str:
   --studio-success-bg: #eaf6ef;
 }
 .block-container {
-  padding-top: 2rem;
-  max-width: 1180px;
+  padding-top: 1.6rem;
+  max-width: 1320px;
 }
 .studio-hero {
-  border: 1px solid var(--studio-border);
-  border-radius: 16px;
-  padding: 1.35rem 1.5rem;
-  background: linear-gradient(135deg, #f8fbfa 0%, #eef6f4 100%);
-  margin-bottom: 1rem;
+  border: 1px solid #b8cbc8;
+  border-radius: 14px;
+  padding: 1.55rem 1.65rem 1.25rem 1.65rem;
+  background: #ffffff;
+  box-shadow: 0 1px 0 rgba(18, 45, 46, 0.06);
+  margin-bottom: .8rem;
 }
 .studio-eyebrow {
   color: var(--studio-accent);
@@ -254,30 +255,65 @@ def app_style_css() -> str:
 }
 .studio-hero h1 {
   margin: 0;
-  font-size: 2.15rem;
+  color: #183536;
+  font-size: 2.35rem;
   line-height: 1.15;
 }
 .studio-subtitle {
-  color: var(--studio-text-soft);
-  font-size: 1.05rem;
-  margin: .35rem 0 .75rem 0;
+  color: #274849;
+  font-size: 1.08rem;
+  margin: .45rem 0 .8rem 0;
+  max-width: 760px;
 }
 .studio-safety {
   display: inline-flex;
   gap: .45rem;
   align-items: center;
-  border: 1px solid var(--studio-border);
+  border: 1px solid #d7e2df;
   border-radius: 999px;
-  padding: .28rem .7rem;
-  background: #ffffff;
-  color: #2f4747;
+  padding: .26rem .64rem;
+  background: #f7faf9;
+  color: #496162;
+  font-size: .9rem;
+}
+.studio-workflow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .75rem;
+  margin: .9rem 0 1.1rem 0;
+}
+.studio-workflow-step {
+  border: 1px solid #c6d7d4;
+  border-radius: 12px;
+  background: #f7faf9;
+  padding: .9rem .95rem;
+}
+.studio-workflow-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: 999px;
+  background: var(--studio-accent);
+  color: #ffffff;
+  font-weight: 700;
+  margin-right: .45rem;
+}
+.studio-workflow-title {
+  color: #1e3d3e;
+  font-weight: 700;
+}
+.studio-workflow-helper {
+  color: #536b6b;
+  margin: .45rem 0 0 0;
   font-size: .92rem;
 }
 .studio-step {
-  border: 1px solid var(--studio-border);
-  border-radius: 14px;
+  border: 1px solid #c9d9d6;
+  border-radius: 12px;
   padding: 1rem 1.1rem;
-  background: var(--studio-card);
+  background: #ffffff;
   margin: 1rem 0 .8rem 0;
 }
 .studio-step h2 {
@@ -337,6 +373,17 @@ def app_style_css() -> str:
 .studio-muted {
   color: var(--studio-text-soft);
 }
+@media (max-width: 760px) {
+  .studio-workflow {
+    grid-template-columns: 1fr;
+  }
+  .studio-hero {
+    padding: 1.2rem 1.1rem 1rem 1.1rem;
+  }
+  .studio-hero h1 {
+    font-size: 1.9rem;
+  }
+}
 </style>
 """.strip()
 
@@ -346,14 +393,35 @@ def render_app_header() -> None:
 
 
 def app_header_html() -> str:
-    return """
+    return (
+        """
 <section class="studio-hero">
   <div class="studio-eyebrow">Local application workspace</div>
   <h1>Job Packet Studio</h1>
-  <p class="studio-subtitle">Turn a job posting into a reviewable application packet.</p>
-  <span class="studio-safety">Local-first: no scraping, credentials, AI API calls, or auto-apply.</span>
+  <p class="studio-subtitle">Paste a job posting, generate a local review packet, then decide manually.</p>
+  <span class="studio-safety">Local-first: no scraping, credentials, external AI API calls, or auto-apply.</span>
 </section>
-""".strip()
+"""
+        + workflow_strip_html()
+    ).strip()
+
+
+def workflow_strip_html() -> str:
+    steps = [
+        ("1", "Choose profile", "Use the demo profile or a private local profile."),
+        ("2", "Paste or upload job", "Add only job text you chose to provide."),
+        ("3", "Generate packet", "Review drafts and decide outside the app."),
+    ]
+    step_html = []
+    for number, title, helper in steps:
+        step_html.append(
+            '<div class="studio-workflow-step">'
+            f'<span class="studio-workflow-number">{html.escape(number)}</span>'
+            f'<span class="studio-workflow-title">{html.escape(title)}</span>'
+            f'<p class="studio-workflow-helper">{html.escape(helper)}</p>'
+            "</div>"
+        )
+    return '<section class="studio-workflow">' + "".join(step_html) + "</section>"
 
 
 def render_step_card(title: str, helper: str, status: str = "") -> None:
