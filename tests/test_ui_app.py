@@ -20,7 +20,6 @@ from ui_app import (
     example_job_posting_text,
     extract_readable_html_text,
     extract_uploaded_job_text,
-    fetch_url_text,
     _find_duplicate_saved_packets,
     html_list,
     extract_job_url,
@@ -57,21 +56,6 @@ from ui_app import (
     welcome_steps,
     workflow_strip_html,
 )
-
-
-class _FakeResponse:
-    def __init__(self, payload: bytes, content_type: str = "text/html; charset=utf-8") -> None:
-        self.payload = payload
-        self.headers = {"Content-Type": content_type}
-
-    def __enter__(self) -> "_FakeResponse":
-        return self
-
-    def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
-        return None
-
-    def read(self, size: int) -> bytes:
-        return self.payload[:size]
 
 
 PROFILE_TEXT = """
@@ -720,30 +704,6 @@ def test_html_extraction_removes_scripts_and_keeps_visible_text() -> None:
     assert "Python automation workflows" in text
     assert "alert" not in text
     assert "display: none" not in text
-
-
-def test_fetch_url_text_uses_explicit_url_and_extracts_html() -> None:
-    def fake_open(request: object, timeout: int) -> _FakeResponse:
-        assert timeout == 10
-        assert request.full_url == "https://example.com/job"
-        return _FakeResponse(
-            b"<html><body><h1>Systems Engineer I</h1><script>noise()</script><p>Python and SQL role.</p></body></html>"
-        )
-
-    text = fetch_url_text("https://example.com/job", opener=fake_open)
-
-    assert "Systems Engineer I" in text
-    assert "Python and SQL role." in text
-    assert "noise" not in text
-
-
-def test_fetch_url_text_rejects_invalid_urls() -> None:
-    try:
-        fetch_url_text("not-a-url", opener=lambda request, timeout: None)
-    except ValueError as error:
-        assert "http or https" in str(error)
-    else:
-        raise AssertionError("Invalid URL should fail before fetching")
 
 
 def test_uploaded_html_and_text_are_cleaned() -> None:

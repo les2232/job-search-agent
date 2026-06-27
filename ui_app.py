@@ -6,11 +6,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 import re
 import sys
-from urllib.error import URLError
 from urllib.parse import quote
-from urllib.parse import urlparse
-from urllib.request import Request
-from urllib.request import urlopen
 
 import streamlit as st
 
@@ -657,7 +653,7 @@ def _format_list_preview(values: list[str], limit: int = 3) -> str:
 
 
 def _show_welcome_section() -> None:
-    with st.expander("Start here: how this local app works", expanded=True):
+    with st.expander("How this local app works", expanded=False):
         st.markdown("**Simple workflow**")
         for step in welcome_steps():
             st.write(f"- {step}")
@@ -725,50 +721,51 @@ def _show_guided_packet_builder(
     )
 
     if generate_clicked:
-        full_job_text = _build_guided_job_text(
-            cleaned_job_text,
-            title=detail_overrides.get("title", ""),
-            company=detail_overrides.get("company", ""),
-            location=detail_overrides.get("location", ""),
-            work_mode=detail_overrides.get("work_mode", ""),
-        )
-        if not full_job_text.strip():
-            st.error(
-                "Paste the job title, company, responsibilities, qualifications, "
-                "and salary/location if available. You can paste the whole job page; "
-                "the app will try to clean it."
-            )
-        else:
-            job = parse_job_text(
-                full_job_text,
+        with st.spinner("Generating local packet..."):
+            full_job_text = _build_guided_job_text(
+                cleaned_job_text,
                 title=detail_overrides.get("title", ""),
                 company=detail_overrides.get("company", ""),
                 location=detail_overrides.get("location", ""),
+                work_mode=detail_overrides.get("work_mode", ""),
             )
-            score_details = score_job(job)
-            source_url = str(quality_summary.get("source_url") or "")
-            if source_url:
-                _attach_source_url(score_details, source_url)
-            evidence_answers = _suggest_evidence_answers(
-                profile,
-                _evidence_requirements(score_details),
-            )
-            packet = generate_application_packet(
-                score_details,
-                profile.get("resume_text"),
-                evidence_answers=evidence_answers,
-            )
-            st.session_state["builder_job"] = job
-            st.session_state["builder_score_details"] = score_details
-            st.session_state["builder_full_job_text"] = full_job_text
-            st.session_state["builder_source_url"] = source_url
-            st.session_state["builder_analysis_key"] = _score_analysis_key(score_details)
-            st.session_state["builder_evidence_answers"] = evidence_answers
-            st.session_state["builder_packet"] = packet
-            st.session_state["builder_packet_analysis_key"] = _score_analysis_key(score_details)
-            st.session_state.pop("builder_saved_packet", None)
-            st.session_state.pop("builder_agent_review", None)
-            st.session_state.pop("builder_agent_analysis_key", None)
+            if not full_job_text.strip():
+                st.error(
+                    "Paste the job title, company, responsibilities, qualifications, "
+                    "and salary/location if available. You can paste the whole job page; "
+                    "the app will try to clean it."
+                )
+            else:
+                job = parse_job_text(
+                    full_job_text,
+                    title=detail_overrides.get("title", ""),
+                    company=detail_overrides.get("company", ""),
+                    location=detail_overrides.get("location", ""),
+                )
+                score_details = score_job(job)
+                source_url = str(quality_summary.get("source_url") or "")
+                if source_url:
+                    _attach_source_url(score_details, source_url)
+                evidence_answers = _suggest_evidence_answers(
+                    profile,
+                    _evidence_requirements(score_details),
+                )
+                packet = generate_application_packet(
+                    score_details,
+                    profile.get("resume_text"),
+                    evidence_answers=evidence_answers,
+                )
+                st.session_state["builder_job"] = job
+                st.session_state["builder_score_details"] = score_details
+                st.session_state["builder_full_job_text"] = full_job_text
+                st.session_state["builder_source_url"] = source_url
+                st.session_state["builder_analysis_key"] = _score_analysis_key(score_details)
+                st.session_state["builder_evidence_answers"] = evidence_answers
+                st.session_state["builder_packet"] = packet
+                st.session_state["builder_packet_analysis_key"] = _score_analysis_key(score_details)
+                st.session_state.pop("builder_saved_packet", None)
+                st.session_state.pop("builder_agent_review", None)
+                st.session_state.pop("builder_agent_analysis_key", None)
 
     job = st.session_state.get("builder_job")
     score_details = st.session_state.get("builder_score_details")
@@ -1166,26 +1163,6 @@ def _show_job_intake_mode(intake_mode: str) -> None:
         )
         return
 
-    if intake_mode == "Import from URL":
-        st.caption(
-            "URL import works best on public job pages. Some sites block automated "
-            "extraction. If this fails, paste or upload the posting instead."
-        )
-        source_url = st.text_input(
-            "Job posting URL",
-            key="builder_import_url",
-            placeholder="https://example.com/job-posting",
-        )
-        if st.button("Import URL", key="builder_import_url_button"):
-            try:
-                imported_text = fetch_url_text(source_url)
-            except (OSError, URLError, ValueError) as error:
-                st.warning(f"Could not import that URL: {error}. Paste or upload the posting instead.")
-            else:
-                st.session_state["builder_job_text"] = imported_text
-                st.success("Imported text from URL. Review and edit it below before analysis.")
-        return
-
     if intake_mode == "Upload file":
         uploaded_file = st.file_uploader(
             "Upload saved job posting",
@@ -1311,35 +1288,6 @@ def _build_guided_job_text(
     if body:
         return "\n".join(header_lines + ["", "Full Job Description:", body])
     return "\n".join(header_lines)
-
-
-def fetch_url_text(
-    url: str,
-    opener: object | None = None,
-    timeout: int = 10,
-    max_bytes: int = MAX_IMPORTED_JOB_BYTES,
-) -> str:
-    """Fetch and extract readable text from one explicit public URL."""
-    clean_url = url.strip()
-    parsed = urlparse(clean_url)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise ValueError("Enter a valid http or https URL")
-
-    request = Request(
-        clean_url,
-        headers={"User-Agent": "job-search-agent/1.0 (+local user import)"},
-    )
-    open_url = opener or urlopen
-    with open_url(request, timeout=timeout) as response:
-        payload = response.read(max_bytes + 1)
-        if len(payload) > max_bytes:
-            raise ValueError("Page is too large to import safely")
-        content_type = response.headers.get("Content-Type", "")
-    charset = _charset_from_content_type(content_type) or "utf-8"
-    html_or_text = payload.decode(charset, errors="replace")
-    if "html" in content_type.lower() or _looks_like_html(html_or_text):
-        return extract_readable_html_text(html_or_text)
-    return clean_imported_job_text(html_or_text)
 
 
 def extract_uploaded_job_text(content: bytes, filename: str) -> str:
@@ -1532,75 +1480,6 @@ class _ReadableHTMLTextParser(HTMLParser):
         clean_data = data.strip()
         if clean_data:
             self.text_parts.append(clean_data)
-
-
-def _show_builder_analysis(
-    job: dict[str, object],
-    score_details: dict[str, object],
-    profile: dict[str, object],
-    applications_dir: Path,
-) -> None:
-    st.divider()
-    st.header("Step 3: Review Fit")
-    _show_analysis_summary(job, score_details, profile)
-    _show_job_packet_agent_review(score_details, profile)
-
-    analysis_key = _score_analysis_key(score_details)
-    if st.session_state.get("builder_packet_analysis_key") != analysis_key:
-        st.session_state.pop("builder_packet", None)
-        st.session_state.pop("builder_packet_analysis_key", None)
-        st.session_state.pop("builder_saved_packet", None)
-
-    with st.expander("Detailed fit analysis"):
-        _show_analysis_details(score_details)
-
-    st.divider()
-    st.header("Step 4: Review Evidence")
-    evidence_answers = _show_evidence_check(profile, score_details, analysis_key)
-
-    generate_clicked = False
-    st.divider()
-    st.header("Step 5: Generate Packet")
-    st.caption("Generate reviewable drafts using the parsed job, fit analysis, profile, proof blocks, and evidence answers.")
-    if _is_skip_recommendation(score_details):
-        with st.expander("Generate a packet for this Skip role anyway"):
-            st.caption(
-                "Use this only for testing, saving for later, or a deliberate exception."
-            )
-            generate_clicked = st.button(
-                "Generate Packet Anyway",
-                key="builder_generate_packet_anyway",
-            )
-    else:
-        generate_clicked = st.button(
-            "Generate Packet",
-            type="primary",
-            key="builder_generate_packet",
-        )
-
-    if generate_clicked:
-        st.session_state["builder_packet"] = generate_application_packet(
-            score_details,
-            profile.get("resume_text"),
-            evidence_answers=evidence_answers,
-        )
-        st.session_state["builder_packet_analysis_key"] = analysis_key
-        st.session_state["builder_evidence_answers"] = evidence_answers
-        st.session_state.pop("builder_saved_packet", None)
-
-    packet = st.session_state.get("builder_packet")
-    if not isinstance(packet, dict):
-        st.info("Review the fit and evidence suggestions, then generate the packet drafts.")
-        return
-
-    _show_packet_preview(packet, score_details, applications_dir)
-    _show_next_action_section(packet, score_details)
-    _show_builder_save_controls(packet, score_details, applications_dir)
-
-    saved_packet = st.session_state.get("builder_saved_packet")
-    if isinstance(saved_packet, dict):
-        st.success(f"Saved packet: {saved_packet['folder_path']}")
-        st.caption("Review saved packets below, or open that folder from your file browser.")
 
 
 def _show_builder_save_controls(
@@ -2867,12 +2746,12 @@ def _show_saved_packet_status_controls(
         height=90,
         key=f"{widget_key}_notes",
     )
-    next_action_date = st.text_input(
+    _next_action = st.date_input(
         "Next action date",
-        value=str(tracking.get("next_action_date") or ""),
-        placeholder="YYYY-MM-DD",
+        value=None,
         key=f"{widget_key}_next_action_date",
     )
+    next_action_date = _next_action.isoformat() if _next_action else ""
     next_action_note = st.text_input(
         "Next action note",
         value=str(tracking.get("next_action_note") or ""),
@@ -2881,12 +2760,12 @@ def _show_saved_packet_status_controls(
 
     applied_date = None
     if status in {"Applied", "Interview", "Offer", "Rejected", "Archived"}:
-        applied_date = st.text_input(
+        _applied = st.date_input(
             "Applied date",
-            value=str(tracking.get("applied_date") or ""),
-            placeholder="YYYY-MM-DD",
+            value=None,
             key=f"{widget_key}_applied_date",
         )
+        applied_date = _applied.isoformat() if _applied else ""
 
     if st.button("Update application status", key=f"{widget_key}_update"):
         result = update_application_tracking(
