@@ -14,9 +14,17 @@ LOCATION_LABELS = ["Location", "Job Location", "Work Location"]
 WORK_MODE_LABELS = ["Work Mode", "Work Arrangement"]
 WORK_MODE_KEYWORDS = ["remote", "hybrid", "on-site", "onsite", "on site"]
 BOILERPLATE_LINES = {
+    "about",
     "apply",
     "apply now",
+    "browse companies",
+    "browse jobs",
+    "career advice",
+    "accessibility at indeed",
     "back to search results",
+    "full job description",
+    "hiring lab",
+    "help",
     "equal opportunity employer",
     "full job description",
     "here's how the job details align with your profile.",
@@ -25,11 +33,19 @@ BOILERPLATE_LINES = {
     "job type",
     "jobs",
     "required skills/experience",
+    "privacy center",
+    "report job",
     "save job",
+    "salaries",
     "search jobs",
     "share job",
     "similar jobs",
+    "skip to main content",
+    "start of main content",
+    "terms",
     "this employer is required to notify all applicants",
+    "work at indeed",
+    "your privacy choices",
 }
 NON_TITLE_STARTS = {
     "about",
@@ -53,6 +69,12 @@ NON_TITLE_STARTS = {
     "you",
     "your skills and approach",
 }
+SECTION_HEADING_LINES = {
+    "minimum qualifications",
+    "nice to have",
+    "preferred qualifications",
+    "qualifications",
+}
 COMPANY_INTRO_SKIP_WORDS = {"I", "It", "Our", "The", "This", "We", "You"}
 
 
@@ -75,30 +97,59 @@ def parse_job_text(
     labeled_work_mode = _find_first_labeled_value(job_text, WORK_MODE_LABELS)
     top_lines = _get_top_lines(job_text)
 
-    parsed_title = _first_known_value(title, labeled_title)
-    parsed_company = _first_known_value(company, labeled_company)
-    parsed_location = _first_known_value(location, labeled_location)
+    parsed_title, title_source = _first_known_value_with_source(
+        (title, "explicit"),
+        (labeled_title, "label"),
+    )
+    parsed_company, company_source = _first_known_value_with_source(
+        (company, "explicit"),
+        (labeled_company, "label"),
+    )
+    parsed_location, location_source = _first_known_value_with_source(
+        (location, "explicit"),
+        (labeled_location, "label"),
+    )
     fallback_path = "explicit fields"
 
     if parsed_title == "Unknown":
         parsed_title = _infer_title(top_lines)
+        title_source = "heuristic" if parsed_title != "Unknown" else "none"
+        if title_source == "heuristic" and _is_invalid_heuristic_guess(parsed_title):
+            parsed_title = "Unknown"
+            title_source = "none"
         fallback_path = "top-line inference"
 
     if parsed_company == "Unknown":
         parsed_company = _infer_company(top_lines, parsed_title)
+        company_source = "heuristic" if parsed_company != "Unknown" else "none"
+        if company_source == "heuristic" and _is_invalid_heuristic_guess(parsed_company):
+            parsed_company = "Unknown"
+            company_source = "none"
         fallback_path = "top-line inference"
 
     if parsed_location == "Unknown":
         parsed_location = _infer_location(top_lines)
+        location_source = "heuristic" if parsed_location != "Unknown" else "none"
         fallback_path = "top-line inference"
 
-    work_mode = _normalize_work_mode(
-        _first_known_value(
-            labeled_work_mode,
-            _infer_work_mode([parsed_location]),
-            _infer_work_mode(top_lines),
-        )
+    work_mode_value, work_mode_source = _first_known_value_with_source(
+        (labeled_work_mode, "label"),
+        (_infer_work_mode([parsed_location]), "heuristic"),
+        (_infer_work_mode(top_lines), "heuristic"),
     )
+    work_mode = _normalize_work_mode(work_mode_value)
+    if work_mode == "Unknown":
+        work_mode_source = "none"
+    field_sources = {
+        "title": title_source,
+        "company": company_source,
+        "location": location_source,
+        "work_mode": work_mode_source,
+    }
+    field_confidence = {
+        field: _confidence_for_source(source)
+        for field, source in field_sources.items()
+    }
     parser_debug = {
         "raw_preview": clean_text[:DEBUG_PREVIEW_CHARS],
         "parsed_title": parsed_title,
@@ -106,6 +157,8 @@ def parse_job_text(
         "parsed_location": parsed_location,
         "parsed_work_mode": work_mode,
         "fallback_path": fallback_path,
+        "field_sources": field_sources,
+        "field_confidence": field_confidence,
     }
     LOGGER.debug(
         "Parsed job metadata: raw_preview=%r title=%r company=%r "
@@ -123,6 +176,8 @@ def parse_job_text(
         "company": parsed_company,
         "location": parsed_location,
         "work_mode": work_mode,
+        "field_sources": field_sources,
+        "field_confidence": field_confidence,
         "raw_text": clean_text,
         "parser_debug": parser_debug,
     }
@@ -169,6 +224,21 @@ def _first_known_value(*values: str) -> str:
         if value and value.strip() and value.strip().lower() != "unknown":
             return value.strip()
     return "Unknown"
+
+
+def _first_known_value_with_source(*values: tuple[str, str]) -> tuple[str, str]:
+    for value, source in values:
+        if value and value.strip() and value.strip().lower() != "unknown":
+            return value.strip(), source
+    return "Unknown", "none"
+
+
+def _confidence_for_source(source: str) -> str:
+    if source in {"explicit", "label"}:
+        return "verified"
+    if source == "heuristic":
+        return "unverified"
+    return "none"
 
 
 def _infer_title(lines: list[str]) -> str:
@@ -293,6 +363,8 @@ def _is_section_heading(line: str) -> bool:
 
 def _is_boilerplate_line(line: str) -> bool:
     normalized = _normalized_heading(line)
+    if _is_logo_alt_text(line):
+        return True
     return normalized in BOILERPLATE_LINES or any(
         normalized.startswith(value)
         for value in BOILERPLATE_LINES
@@ -302,6 +374,25 @@ def _is_boilerplate_line(line: str) -> bool:
 
 def _normalized_heading(line: str) -> str:
     return line.strip().lower().rstrip(":")
+
+
+def _is_logo_alt_text(line: str) -> bool:
+    normalized = _normalized_heading(line)
+    return normalized.endswith(" logo") and len(normalized.split()) < 5
+
+
+def _is_invalid_heuristic_guess(value: str) -> bool:
+    # Keep these obvious page-chrome checks aligned with ui_app.py's cleaner noise rules.
+    normalized = _normalized_heading(value)
+    if not normalized:
+        return True
+    if _is_boilerplate_line(value):
+        return True
+    if value.strip().endswith(":"):
+        return True
+    if normalized in SECTION_HEADING_LINES or _is_section_heading(value):
+        return True
+    return False
 
 
 def _infer_company_from_intro(line: str, previous_section: str = "") -> str:

@@ -1,3 +1,5 @@
+import ui_app
+
 from ui_app import (
     app_header_html,
     build_browser_capture_bookmarklet,
@@ -14,6 +16,7 @@ from ui_app import (
     clean_job_posting_text,
     clean_imported_job_text,
     default_profile_index,
+    _parse_iso_date,
     detected_detail_chips,
     _evidence_suggestion_counts,
     _evidence_requirements,
@@ -42,6 +45,7 @@ from ui_app import (
     saved_packet_folder_path,
     saved_packet_folder_note,
     draft_packet_folder_note,
+    _show_saved_packet_status_controls,
     local_profile_setup_steps,
     packet_start_here_items,
     _saved_packet_table_row,
@@ -323,6 +327,42 @@ def test_clean_job_posting_text_removes_common_page_noise_and_duplicates() -> No
     assert "Troubleshoot Microsoft 365 access issues" in cleaned
 
 
+def test_clean_job_posting_text_removes_job_board_scaffolding_and_logo_alt_text() -> None:
+    messy_text = """
+    Start of main content
+    Clarvida logo
+    Hiring Lab
+    Career advice
+    Browse jobs
+    Browse companies
+    Salaries
+    Work at Indeed
+    Privacy Center
+    Your Privacy Choices
+    Terms
+
+    AI Automation Specialist
+    Example Automation Studio
+    Responsibilities:
+    Build local workflow automation tools for support teams.
+    Qualifications:
+    Python scripting and documentation habits.
+    """
+
+    cleaned = clean_job_posting_text(messy_text)
+
+    assert "Start of main content" not in cleaned
+    assert "Clarvida logo" not in cleaned
+    assert "Hiring Lab" not in cleaned
+    assert "Career advice" not in cleaned
+    assert "Browse jobs" not in cleaned
+    assert "Privacy Center" not in cleaned
+    assert "Your Privacy Choices" not in cleaned
+    assert "AI Automation Specialist" in cleaned
+    assert "Example Automation Studio" in cleaned
+    assert "Build local workflow automation tools" in cleaned
+
+
 def test_extract_job_url_detects_source_without_fetching() -> None:
     text = "Source: https://example.com/jobs/123?ref=abc. Paste follows."
 
@@ -543,6 +583,90 @@ def test_draft_packet_folder_note_avoids_saved_language() -> None:
     assert "Click Save Packet to write files under:" in note
     assert "applications/default/2026-06-13_example_role" in note
     assert "Saved packet folder" not in note
+
+
+def test_parse_iso_date_handles_valid_empty_and_malformed_values() -> None:
+    parsed = _parse_iso_date("2026-03-14")
+
+    assert parsed is not None
+    assert parsed.isoformat() == "2026-03-14"
+    assert _parse_iso_date("") is None
+    assert _parse_iso_date(None) is None
+    assert _parse_iso_date("not-a-date") is None
+
+
+def test_saved_packet_status_update_preserves_existing_dates(monkeypatch) -> None:
+    captured: dict[str, object] = {"date_values": []}
+
+    def fake_date_input(label: str, value: object, key: str) -> None:
+        captured["date_values"].append((label, value, key))
+        return None
+
+    def fake_update_application_tracking(
+        packet_folder: object,
+        status: object,
+        **kwargs: object,
+    ) -> dict[str, object]:
+        captured["packet_folder"] = packet_folder
+        captured["status"] = status
+        captured["update_kwargs"] = kwargs
+        return {"updated": True, "message": "Updated application tracking for Interview."}
+
+    monkeypatch.setattr(ui_app.st, "subheader", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        ui_app.st,
+        "selectbox",
+        lambda label, options, index=0, key=None: "Interview",
+    )
+    monkeypatch.setattr(
+        ui_app.st,
+        "text_area",
+        lambda label, value="", height=None, key=None: "Updated notes.",
+    )
+    monkeypatch.setattr(ui_app.st, "date_input", fake_date_input)
+    monkeypatch.setattr(
+        ui_app.st,
+        "text_input",
+        lambda label, value="", key=None: "Follow up with recruiter.",
+    )
+    monkeypatch.setattr(ui_app.st, "button", lambda *args, **kwargs: True)
+    monkeypatch.setattr(ui_app.st, "success", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ui_app.st, "warning", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ui_app.st, "rerun", lambda: None)
+    monkeypatch.setattr(
+        ui_app,
+        "update_application_tracking",
+        fake_update_application_tracking,
+    )
+
+    _show_saved_packet_status_controls(
+        {
+            "folder_path": "applications/default/example",
+            "application_tracking": {
+                "status": "Applied",
+                "notes": "Old notes.",
+                "applied_date": "2026-03-14",
+                "next_action_date": "2026-03-21",
+                "next_action_note": "Old reminder.",
+            },
+        },
+        "test",
+    )
+
+    date_values = captured["date_values"]
+    assert len(date_values) == 2
+    assert date_values[0][0] == "Next action date"
+    assert date_values[0][1].isoformat() == "2026-03-21"
+    assert date_values[1][0] == "Applied date"
+    assert date_values[1][1].isoformat() == "2026-03-14"
+
+    update_kwargs = captured["update_kwargs"]
+    assert captured["packet_folder"] == "applications/default/example"
+    assert captured["status"] == "Interview"
+    assert update_kwargs["notes"] == "Updated notes."
+    assert update_kwargs["next_action_date"] == "2026-03-21"
+    assert update_kwargs["applied_date"] == "2026-03-14"
+    assert update_kwargs["next_action_note"] == "Follow up with recruiter."
 
 
 def test_packet_validation_summary_reports_valid_required_files() -> None:

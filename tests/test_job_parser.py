@@ -41,6 +41,98 @@ Responsibilities:
     assert job["work_mode"] == "Remote"
 
 
+def test_parse_job_text_reports_verified_confidence_for_labeled_fields() -> None:
+    job = parse_job_text(
+        """Job Title: IT Support Specialist
+Company: Example Organization
+Location: Remote
+Work Mode: Remote
+
+Responsibilities:
+- Support users with Microsoft 365.
+"""
+    )
+
+    assert job["field_sources"] == {
+        "title": "label",
+        "company": "label",
+        "location": "label",
+        "work_mode": "label",
+    }
+    assert job["field_confidence"] == {
+        "title": "verified",
+        "company": "verified",
+        "location": "verified",
+        "work_mode": "verified",
+    }
+
+
+def test_parse_job_text_reports_unverified_confidence_for_heuristic_fields() -> None:
+    job = parse_job_text(
+        """Product Support Specialist
+Example Software Studio
+Denver, CO (Hybrid)
+
+We are looking for a support specialist to troubleshoot customer issues.
+"""
+    )
+
+    assert job["title"] == "Product Support Specialist"
+    assert job["company"] == "Example Software Studio"
+    assert job["location"] == "Denver, CO (Hybrid)"
+    assert job["work_mode"] == "Hybrid"
+    assert job["field_sources"] == {
+        "title": "heuristic",
+        "company": "heuristic",
+        "location": "heuristic",
+        "work_mode": "heuristic",
+    }
+    assert job["field_confidence"] == {
+        "title": "unverified",
+        "company": "unverified",
+        "location": "unverified",
+        "work_mode": "unverified",
+    }
+
+
+def test_parse_job_text_rejects_page_chrome_as_heuristic_title_or_company() -> None:
+    job = parse_job_text(
+        """Start of main content
+Clarvida logo
+Responsibilities:
+Build local workflow automation tools for support teams.
+Qualifications:
+Python scripting and documentation habits.
+"""
+    )
+
+    assert job["title"] == "Unknown"
+    assert job["company"] == "Unknown"
+    assert job["field_sources"]["title"] == "none"
+    assert job["field_sources"]["company"] == "none"
+    assert job["field_confidence"]["title"] == "none"
+    assert job["field_confidence"]["company"] == "none"
+
+
+def test_parse_job_text_keeps_valid_unlabeled_heuristic_title() -> None:
+    job = parse_job_text(
+        """AI Automation Specialist
+Example Automation Studio
+Remote
+
+Responsibilities:
+Build local workflow automation tools for support teams.
+Qualifications:
+Python scripting and documentation habits.
+"""
+    )
+
+    assert job["title"] == "AI Automation Specialist"
+    assert job["company"] == "Example Automation Studio"
+    assert job["field_sources"]["title"] == "heuristic"
+    assert job["field_confidence"]["title"] == "unverified"
+
+
 def test_parse_job_text_returns_unknown_for_missing_labels() -> None:
     job = parse_job_text("Use Python to automate reporting workflows.")
 

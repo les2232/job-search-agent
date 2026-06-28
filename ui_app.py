@@ -1,6 +1,7 @@
 """Local Streamlit UI for the job search agent."""
 
 from collections import Counter
+import datetime
 import html
 from html.parser import HTMLParser
 from pathlib import Path
@@ -62,15 +63,26 @@ MIN_USEFUL_JOB_CHARS = 350
 MIN_USEFUL_JOB_LINES = 8
 
 NOISY_JOB_PAGE_LINES = {
+    "about",
     "apply",
     "apply now",
+    "browse companies",
+    "browse jobs",
+    "career advice",
     "save",
     "save job",
+    "salaries",
     "share",
     "share job",
     "source link",
     "copy link",
+    "accessibility at indeed",
+    "career advice",
+    "full job description",
+    "hiring lab",
+    "help",
     "job details",
+    "privacy center",
     "sign in",
     "sign up",
     "create alert",
@@ -84,6 +96,10 @@ NOISY_JOB_PAGE_LINES = {
     "report job",
     "print",
     "back to search results",
+    "start of main content",
+    "terms",
+    "work at indeed",
+    "your privacy choices",
 }
 NOISY_JOB_PAGE_PREFIXES = (
     "accept all cookies",
@@ -98,6 +114,7 @@ NOISY_JOB_PAGE_PREFIXES = (
     "this website uses cookies",
     "enable javascript",
     "skip to main content",
+    "start of main content",
     "posted on",
     "share this job",
     "source:",
@@ -238,10 +255,10 @@ def app_style_css() -> str:
 .studio-hero {
   border: 1px solid #b8cbc8;
   border-radius: 14px;
-  padding: 1.55rem 1.65rem 1.25rem 1.65rem;
+  padding: 1rem 1.65rem .85rem 1.65rem;
   background: #ffffff;
   box-shadow: 0 1px 0 rgba(18, 45, 46, 0.06);
-  margin-bottom: .8rem;
+  margin-bottom: .55rem;
 }
 .studio-eyebrow {
   color: var(--studio-accent);
@@ -276,13 +293,13 @@ def app_style_css() -> str:
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: .75rem;
-  margin: .9rem 0 1.1rem 0;
+  margin: .6rem 0 .75rem 0;
 }
 .studio-workflow-step {
   border: 1px solid #c6d7d4;
   border-radius: 12px;
   background: #f7faf9;
-  padding: .9rem .95rem;
+  padding: .55rem .95rem;
 }
 .studio-workflow-number {
   display: inline-flex;
@@ -308,9 +325,9 @@ def app_style_css() -> str:
 .studio-step {
   border: 1px solid #c9d9d6;
   border-radius: 12px;
-  padding: 1rem 1.1rem;
+  padding: .6rem 1.1rem;
   background: #ffffff;
-  margin: 1rem 0 .8rem 0;
+  margin: .65rem 0 .5rem 0;
 }
 .studio-step h2 {
   font-size: 1.2rem;
@@ -354,9 +371,9 @@ def app_style_css() -> str:
 .studio-summary {
   border: 1px solid var(--studio-border);
   border-radius: 16px;
-  padding: 1rem 1.15rem;
+  padding: .7rem 1.15rem;
   background: #ffffff;
-  margin: .7rem 0 1rem 0;
+  margin: .45rem 0 .7rem 0;
 }
 .studio-summary h3 {
   margin: 0 0 .35rem 0;
@@ -364,7 +381,7 @@ def app_style_css() -> str:
 }
 .studio-summary-meta {
   color: var(--studio-text-soft);
-  margin-bottom: .65rem;
+  margin-bottom: .45rem;
 }
 .studio-muted {
   color: var(--studio-text-soft);
@@ -374,7 +391,7 @@ def app_style_css() -> str:
     grid-template-columns: 1fr;
   }
   .studio-hero {
-    padding: 1.2rem 1.1rem 1rem 1.1rem;
+    padding: .9rem 1.1rem .8rem 1.1rem;
   }
   .studio-hero h1 {
     font-size: 1.9rem;
@@ -595,6 +612,8 @@ def _is_noisy_job_page_line(line: str) -> bool:
         return True
     if any(normalized.startswith(prefix) for prefix in NOISY_JOB_PAGE_PREFIXES):
         return True
+    if normalized.endswith(" logo") and len(normalized.split()) < 5:
+        return True
     if normalized.startswith(("facebook", "linkedin", "twitter", "x ")) and len(normalized.split()) <= 4:
         return True
     return False
@@ -672,14 +691,21 @@ def _show_guided_packet_builder(
         "Paste a posting or upload a saved file. The app only uses text you provide on this computer.",
     )
 
-    uploaded_file = st.file_uploader(
-        "Upload a saved job posting",
-        type=["txt", "md", "html", "htm"],
-        key="builder_simple_upload",
+    job_text = st.text_area(
+        "Job posting text",
+        height=360,
+        key="builder_job_text",
+        placeholder=job_empty_state_text(),
     )
-    _load_uploaded_job_text_into_session(uploaded_file)
+    st.caption(job_empty_state_text())
 
-    with st.expander("Other local intake helpers"):
+    with st.expander("Other ways to add a posting (upload, samples, browser capture)"):
+        uploaded_file = st.file_uploader(
+            "Upload a saved job posting",
+            type=["txt", "md", "html", "htm"],
+            key="builder_simple_upload",
+        )
+        _load_uploaded_job_text_into_session(uploaded_file)
         st.caption(
             "These are optional. Paste or upload is still the fastest path. "
             "The app does not scrape job sites, ask for credentials, or apply to jobs."
@@ -691,14 +717,6 @@ def _show_guided_packet_builder(
             horizontal=True,
         )
         _show_local_intake_helper(helper_mode)
-
-    job_text = st.text_area(
-        "Job posting text",
-        height=360,
-        key="builder_job_text",
-        placeholder=job_empty_state_text(),
-    )
-    st.caption(job_empty_state_text())
 
     quality_summary = summarize_job_input_quality(job_text)
     cleaned_job_text = str(quality_summary["cleaned_text"])
@@ -878,41 +896,61 @@ def _show_detected_job_details(
         st.info("Detected job details will appear here after you paste or upload text.")
         return {}
 
-    st.markdown("**Detected details**")
+    st.markdown("**Review detected details**")
     render_detected_detail_chips(job, source_url)
 
-    with st.expander("Edit detected details"):
-        st.caption("Only change these if the automatic detection is wrong or missing.")
-        field_cols = st.columns(4)
-        title = field_cols[0].text_input(
-            "Job title",
-            value=_editable_detected_value(job.get("title")),
-            key="builder_title",
-        )
-        company = field_cols[1].text_input(
-            "Company",
-            value=_editable_detected_value(job.get("company")),
-            key="builder_company",
-        )
-        location = field_cols[2].text_input(
-            "Location",
-            value=_editable_detected_value(job.get("location")),
-            key="builder_location",
-        )
-        detected_work_mode = _editable_detected_value(job.get("work_mode"))
-        work_modes = ["", "Remote", "Hybrid", "On-site", "Unknown"]
-        work_mode = field_cols[3].selectbox(
-            "Work mode",
-            work_modes,
-            index=work_modes.index(detected_work_mode) if detected_work_mode in work_modes else 0,
-            key="builder_work_mode",
-        )
+    st.caption("Review these fields before generating. Best guesses are marked for verification.")
+    field_cols = st.columns(4)
+    title = field_cols[0].text_input(
+        "Job title",
+        value=_editable_detected_value(job.get("title")),
+        key="builder_title",
+    )
+    _show_detected_field_note(field_cols[0], job, "title")
+    company = field_cols[1].text_input(
+        "Company",
+        value=_editable_detected_value(job.get("company")),
+        key="builder_company",
+    )
+    _show_detected_field_note(field_cols[1], job, "company")
+    location = field_cols[2].text_input(
+        "Location",
+        value=_editable_detected_value(job.get("location")),
+        key="builder_location",
+    )
+    _show_detected_field_note(field_cols[2], job, "location")
+    detected_work_mode = _editable_detected_value(job.get("work_mode"))
+    work_modes = ["", "Remote", "Hybrid", "On-site", "Unknown"]
+    work_mode = field_cols[3].selectbox(
+        "Work mode",
+        work_modes,
+        index=work_modes.index(detected_work_mode) if detected_work_mode in work_modes else 0,
+        key="builder_work_mode",
+    )
+    _show_detected_field_note(field_cols[3], job, "work_mode")
     return {
         "title": title,
         "company": company,
         "location": location,
         "work_mode": work_mode,
     }
+
+
+def _show_detected_field_note(container: object, job: dict[str, object], field: str) -> None:
+    value = _editable_detected_value(job.get(field))
+    if not value:
+        container.caption("Not detected. Fill this in if you know it.")
+        return
+    confidence = _detected_field_confidence(job, field)
+    if confidence == "unverified":
+        container.caption("Best guess, please verify.")
+
+
+def _detected_field_confidence(job: dict[str, object], field: str) -> str:
+    confidence = job.get("field_confidence")
+    if isinstance(confidence, dict):
+        return str(confidence.get(field) or "none")
+    return "none"
 
 
 def _editable_detected_value(value: object) -> str:
@@ -934,9 +972,6 @@ def _show_generated_packet_result(
     saved_packet = st.session_state.get("builder_saved_packet")
     if isinstance(saved_packet, dict):
         st.success(f"Saved packet: {saved_packet['folder_path']}")
-    with st.expander("Fit and evidence details"):
-        _show_analysis_summary(job, score_details, {"proof_blocks": []})
-        _show_analysis_details(score_details)
     _show_packet_preview(packet, score_details, applications_dir)
 
 
@@ -979,6 +1014,15 @@ def draft_packet_folder_note(folder_path: object) -> str:
 
 def saved_packet_folder_path(folder_path: object) -> str:
     return str(folder_path or "applications/<profile_id>/<saved-folder>")
+
+
+def _parse_iso_date(raw: object) -> datetime.date | None:
+    if not raw:
+        return None
+    try:
+        return datetime.date.fromisoformat(str(raw))
+    except (TypeError, ValueError):
+        return None
 
 
 def _show_saved_packet_folder_location(
@@ -2092,51 +2136,15 @@ def _show_packet_preview(
 ) -> None:
     st.subheader("Packet Draft Preview")
     st.caption("These are local drafts. Review every claim before sending anything to an employer.")
-    strategy = packet.get("resume_strategy_sections")
-    fit_verdict = ""
-    if isinstance(strategy, dict):
-        fit_verdict = str(strategy.get("fit_verdict") or "")
-    if fit_verdict:
-        st.success(f"Fit Verdict: {fit_verdict}")
-    st.info(str(packet.get("apply_recommendation", "")))
     _show_packet_start_here(packet, applications_dir)
 
-    preview_tabs = st.tabs(
-        [
-            "Resume focus",
-            "Tailored resume draft",
-            "Cover letter",
-            "Recruiter message",
-            "Checklist",
-            "Risk notes",
-            "Details / metadata",
-        ]
-    )
+    preview_tabs = st.tabs(["Decision", "Materials", "Gaps"])
     with preview_tabs[0]:
-        _show_plain_list(packet.get("resume_focus_areas"))
-        _show_resume_strategy(packet)
+        _show_packet_decision_tab(packet, score_details)
     with preview_tabs[1]:
-        st.caption(
-            "Reviewable Markdown draft. Check every claim before using it in an application."
-        )
-        st.markdown(
-            _review_section_content(
-                review_sections,
-                "tailored_resume",
-                str(packet.get("tailored_resume_draft", "")),
-            )
-        )
+        _show_packet_materials_tab(packet, review_sections)
     with preview_tabs[2]:
-        st.text(str(packet.get("cover_letter_draft", "")))
-    with preview_tabs[3]:
-        st.text(str(packet.get("recruiter_message", "")))
-    with preview_tabs[4]:
-        _show_plain_list(packet.get("application_checklist"))
-    with preview_tabs[5]:
-        _show_plain_list(packet.get("risk_notes"))
-    with preview_tabs[6]:
-        _show_decision_summary(packet.get("decision_summary"))
-        _show_score_explanation(score_details.get("explanation"))
+        _show_packet_gaps_tab(packet)
 
 
 def _show_next_action_section(
@@ -2184,6 +2192,76 @@ def _show_packet_start_here(
             st.write(f"- {item}")
         if applications_dir is not None:
             st.write(f"- Saved packet files will go under: {applications_dir}")
+
+
+def _show_packet_decision_tab(
+    packet: dict[str, object],
+    score_details: dict[str, object],
+) -> None:
+    strategy = _packet_resume_strategy(packet)
+    _show_decision_summary(packet.get("decision_summary"))
+    if strategy:
+        st.markdown("**Fit verdict**")
+        fit_verdict = str(strategy.get("fit_verdict", "Review Fit"))
+        st.success(fit_verdict)
+        fit_summary = str(strategy.get("fit_summary", "")).strip()
+        if fit_summary:
+            st.write(fit_summary)
+    st.markdown("**Apply recommendation**")
+    st.info(str(packet.get("apply_recommendation", "")))
+    if strategy:
+        st.markdown("**Strong / Supported Overlap**")
+        _show_plain_list(strategy.get("supported_overlap"))
+        st.markdown("**Apply Only If**")
+        _show_plain_list(strategy.get("apply_only_if"))
+    st.markdown("**Application checklist**")
+    _show_plain_list(packet.get("application_checklist"))
+    _show_score_explanation(score_details.get("explanation"))
+
+
+def _show_packet_materials_tab(
+    packet: dict[str, object],
+    review_sections: object = None,
+) -> None:
+    st.markdown("**Tailored resume draft**")
+    st.caption("Reviewable Markdown draft. Check every claim before using it in an application.")
+    st.markdown(
+        _review_section_content(
+            review_sections,
+            "tailored_resume",
+            str(packet.get("tailored_resume_draft", "")),
+        )
+    )
+    st.markdown("**Cover letter draft**")
+    st.text(str(packet.get("cover_letter_draft", "")))
+    st.markdown("**Recruiter message**")
+    st.text(str(packet.get("recruiter_message", "")))
+    st.markdown("**Suggested resume bullets**")
+    _show_plain_list(packet.get("resume_bullet_suggestions"))
+    st.markdown("**Keywords / Themes To Include Honestly**")
+    _show_plain_list(packet.get("keywords_to_include_honestly"))
+
+
+def _show_packet_gaps_tab(packet: dict[str, object]) -> None:
+    strategy = _packet_resume_strategy(packet)
+    st.markdown("**Evidence summary**")
+    _show_evidence_summary(packet.get("evidence_summary"))
+    st.markdown("**Missing Proof Next Actions**")
+    _show_plain_list(packet.get("missing_proof_actions"))
+    if strategy:
+        st.markdown("**Major Requirements To Verify Before Applying**")
+        _show_plain_list(strategy.get("major_requirements_to_verify"))
+        st.markdown("**Consider Skipping Or Deprioritizing If**")
+        _show_plain_list(strategy.get("consider_skipping_if"))
+    st.markdown("**Keywords To Verify Or Avoid**")
+    _show_plain_list(packet.get("keywords_to_avoid_or_verify"))
+    st.markdown("**Risk notes**")
+    _show_plain_list(packet.get("risk_notes"))
+
+
+def _packet_resume_strategy(packet: dict[str, object]) -> dict[str, object]:
+    strategy = packet.get("resume_strategy_sections")
+    return strategy if isinstance(strategy, dict) else {}
 
 
 def _show_decision_summary(value: object) -> None:
@@ -2766,12 +2844,15 @@ def _show_saved_packet_status_controls(
         height=90,
         key=f"{widget_key}_notes",
     )
+    existing_next_action_date = tracking.get("next_action_date")
     _next_action = st.date_input(
         "Next action date",
-        value=None,
+        value=_parse_iso_date(existing_next_action_date),
         key=f"{widget_key}_next_action_date",
     )
-    next_action_date = _next_action.isoformat() if _next_action else ""
+    next_action_date = (
+        _next_action.isoformat() if _next_action else existing_next_action_date
+    )
     next_action_note = st.text_input(
         "Next action note",
         value=str(tracking.get("next_action_note") or ""),
@@ -2780,12 +2861,13 @@ def _show_saved_packet_status_controls(
 
     applied_date = None
     if status in {"Applied", "Interview", "Offer", "Rejected", "Archived"}:
+        existing_applied_date = tracking.get("applied_date")
         _applied = st.date_input(
             "Applied date",
-            value=None,
+            value=_parse_iso_date(existing_applied_date),
             key=f"{widget_key}_applied_date",
         )
-        applied_date = _applied.isoformat() if _applied else ""
+        applied_date = _applied.isoformat() if _applied else existing_applied_date
 
     if st.button("Update application status", key=f"{widget_key}_update"):
         result = update_application_tracking(
@@ -2889,8 +2971,6 @@ def _show_profile_selector() -> dict[str, object]:
         st.stop()
 
     has_local_profile = any(bool(profile.get("is_local")) for profile in profiles)
-    st.caption("Demo profiles are safe examples. Private profiles live under ignored local_profiles/.")
-    st.caption("No ChatGPT memory is used; profile facts are matched deterministically from local files.")
     profile_options = {
         _format_profile_label(profile): profile
         for profile in profiles
@@ -2917,8 +2997,8 @@ def _show_profile_selector() -> dict[str, object]:
             unsafe_allow_html=True,
         )
     if not has_local_profile:
-        st.caption("No private profile found yet. You can keep testing with the demo profile.")
         with st.expander("Add a private local profile later"):
+            st.caption("No private profile found yet. You can keep testing with the demo profile.")
             st.caption(
                 "Optional: demo profiles are safe for testing. For real applications, "
                 "create these ignored local files when you are ready."
@@ -2938,6 +3018,8 @@ def _show_profile_selector() -> dict[str, object]:
         st.info("This profile does not have resume_base.md text yet.")
 
     with st.expander("Profile details"):
+        st.caption("Demo profiles are safe examples. Private profiles live under ignored local_profiles/.")
+        st.caption("No ChatGPT memory is used; profile facts are matched deterministically from local files.")
         st.caption(f"Profile ID: {profile['profile_id']} | Source: {profile['source']}")
         st.caption(f"Profile path: {profile['profile_path']}")
     _show_proof_library(profile)
