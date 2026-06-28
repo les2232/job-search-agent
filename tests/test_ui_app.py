@@ -41,6 +41,7 @@ from ui_app import (
     _saved_review_sections,
     saved_packet_folder_path,
     saved_packet_folder_note,
+    draft_packet_folder_note,
     local_profile_setup_steps,
     packet_start_here_items,
     _saved_packet_table_row,
@@ -183,7 +184,23 @@ def test_packet_summary_card_helpers_include_scan_targets(tmp_path) -> None:
     assert "Maybe" in html
     assert "Python automation" in html
     assert "Production ML" in html
+    assert "Saved packet location" in html
     assert "applications/default/example" in html
+
+
+def test_packet_summary_card_uses_draft_copy_before_save(tmp_path) -> None:
+    data = packet_summary_card_data(
+        {"title": "AI Developer", "company": "Example Studio"},
+        {"score": 78, "recommendation": "Maybe"},
+        {"decision_summary": {}, "evidence_summary": {}},
+        tmp_path,
+        None,
+    )
+    html = packet_summary_card_html(data)
+
+    assert data["is_saved"] is False
+    assert "Click Save Packet to write files under" in html
+    assert "Saved packet location" not in html
 
 
 def test_empty_state_and_step_card_text_are_plain_and_local() -> None:
@@ -517,6 +534,15 @@ def test_saved_packet_folder_note_handles_missing_path() -> None:
     assert path == "applications/<profile_id>/<saved-folder>"
     assert "applications/<profile_id>/<saved-folder>" in note
     assert "packet_index.md" in note
+
+
+def test_draft_packet_folder_note_avoids_saved_language() -> None:
+    note = draft_packet_folder_note("applications/default/2026-06-13_example_role")
+
+    assert "Draft generated, not saved yet" in note
+    assert "Click Save Packet to write files under:" in note
+    assert "applications/default/2026-06-13_example_role" in note
+    assert "Saved packet folder" not in note
 
 
 def test_packet_validation_summary_reports_valid_required_files() -> None:

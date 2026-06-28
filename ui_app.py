@@ -952,7 +952,10 @@ def _show_compact_packet_result(
     )
 
     save_location = packet_save_location(applications_dir, saved_packet)
-    _show_saved_packet_folder_location(save_location)
+    _show_saved_packet_folder_location(
+        save_location,
+        is_saved=isinstance(saved_packet, dict),
+    )
 
 
 def packet_save_location(applications_dir: Path, saved_packet: object) -> str:
@@ -969,6 +972,11 @@ def saved_packet_folder_note(folder_path: object) -> str:
     )
 
 
+def draft_packet_folder_note(folder_path: object) -> str:
+    path_text = saved_packet_folder_path(folder_path)
+    return f"Draft generated, not saved yet. Click Save Packet to write files under: {path_text}"
+
+
 def saved_packet_folder_path(folder_path: object) -> str:
     return str(folder_path or "applications/<profile_id>/<saved-folder>")
 
@@ -976,8 +984,14 @@ def saved_packet_folder_path(folder_path: object) -> str:
 def _show_saved_packet_folder_location(
     folder_path: object,
     validation_result: object = None,
+    is_saved: bool = True,
 ) -> None:
-    st.caption(saved_packet_folder_note(folder_path))
+    note = (
+        saved_packet_folder_note(folder_path)
+        if is_saved
+        else draft_packet_folder_note(folder_path)
+    )
+    st.caption(note)
     st.code(saved_packet_folder_path(folder_path), language="text")
     if isinstance(validation_result, dict):
         _show_saved_packet_validation(validation_result)
@@ -1085,6 +1099,7 @@ def packet_summary_card_data(
         "review": top_packet_review_items(packet),
         "actions": packet_next_actions(packet),
         "save_location": packet_save_location(applications_dir, saved_packet),
+        "is_saved": isinstance(saved_packet, dict),
     }
 
 
@@ -1098,6 +1113,11 @@ def packet_summary_card_html(summary: dict[str, object]) -> str:
     score = html.escape(str(summary.get("score", "Unknown")))
     recommendation = html.escape(str(summary.get("recommendation", "Unknown")))
     save_location = html.escape(str(summary.get("save_location", "")))
+    save_label = (
+        "Saved packet location"
+        if summary.get("is_saved")
+        else "Click Save Packet to write files under"
+    )
     return (
         '<section class="studio-summary">'
         "<h3>Packet summary</h3>"
@@ -1112,7 +1132,7 @@ def packet_summary_card_html(summary: dict[str, object]) -> str:
         f"{html_list(summary.get('review'))}"
         "<strong>Next actions</strong>"
         f"{html_list(summary.get('actions'))}"
-        f'<div class="studio-muted">Saved packet location: {save_location}</div>'
+        f'<div class="studio-muted">{save_label}: {save_location}</div>'
         "</section>"
     )
 
