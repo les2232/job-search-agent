@@ -899,26 +899,23 @@ def _show_detected_job_details(
     st.markdown("**Review detected details**")
     render_detected_detail_chips(job, source_url)
 
-    st.caption("Review these fields before generating. Best guesses are marked for verification.")
+    st.caption("These fields are editable. Review them before generating your packet.")
     field_cols = st.columns(4)
     title = field_cols[0].text_input(
         "Job title",
         value=_editable_detected_value(job.get("title")),
         key="builder_title",
     )
-    _show_detected_field_note(field_cols[0], job, "title")
     company = field_cols[1].text_input(
         "Company",
         value=_editable_detected_value(job.get("company")),
         key="builder_company",
     )
-    _show_detected_field_note(field_cols[1], job, "company")
     location = field_cols[2].text_input(
         "Location",
         value=_editable_detected_value(job.get("location")),
         key="builder_location",
     )
-    _show_detected_field_note(field_cols[2], job, "location")
     detected_work_mode = _editable_detected_value(job.get("work_mode"))
     work_modes = ["", "Remote", "Hybrid", "On-site", "Unknown"]
     work_mode = field_cols[3].selectbox(
@@ -927,7 +924,7 @@ def _show_detected_job_details(
         index=work_modes.index(detected_work_mode) if detected_work_mode in work_modes else 0,
         key="builder_work_mode",
     )
-    _show_detected_field_note(field_cols[3], job, "work_mode")
+    _show_detection_details(job)
     return {
         "title": title,
         "company": company,
@@ -936,14 +933,37 @@ def _show_detected_job_details(
     }
 
 
-def _show_detected_field_note(container: object, job: dict[str, object], field: str) -> None:
+def _show_detection_details(job: dict[str, object]) -> None:
+    details = _detected_field_notes(job)
+    if not details:
+        return
+    with st.expander("Detection details"):
+        for detail in details:
+            st.caption(detail)
+
+
+def _detected_field_notes(job: dict[str, object]) -> list[str]:
+    notes = []
+    for label, field in [
+        ("Job title", "title"),
+        ("Company", "company"),
+        ("Location", "location"),
+        ("Work mode", "work_mode"),
+    ]:
+        note = _detected_field_note(job, field)
+        if note:
+            notes.append(f"{label}: {note}")
+    return notes
+
+
+def _detected_field_note(job: dict[str, object], field: str) -> str:
     value = _editable_detected_value(job.get(field))
     if not value:
-        container.caption("Not detected. Fill this in if you know it.")
-        return
+        return "Not detected. Fill this in if you know it."
     confidence = _detected_field_confidence(job, field)
     if confidence == "unverified":
-        container.caption("Best guess, please verify.")
+        return "Best guess, please verify."
+    return ""
 
 
 def _detected_field_confidence(job: dict[str, object], field: str) -> str:
