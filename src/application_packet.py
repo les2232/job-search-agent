@@ -915,11 +915,13 @@ def _build_tailored_resume_draft(
         profile_text,
         matching_proof_blocks,
     )
+    supported_claims = _tailored_supported_resume_claims(evidence_summary)
     needs_verification = _tailored_needs_verification(evidence_summary)
     skills_to_avoid = _tailored_skills_to_avoid(
         evidence_summary,
         missing_requirements,
     )
+    do_not_claim_yet = _tailored_do_not_claim_yet(evidence_summary, skills_to_avoid)
 
     reviewable_draft = build_tailored_resume_draft(
         tailoring_plan,
@@ -956,13 +958,23 @@ def _build_tailored_resume_draft(
             "",
             "## Internal Review Notes",
             "",
-            "### Needs Verification",
+            "### Supported Resume Claims",
+            "",
+            "These are the safest claims to consider using, assuming the underlying profile or proof is accurate.",
+            "",
+            *_markdown_items(supported_claims),
+            "",
+            "### Needs Verification Before Emphasizing",
+            "",
+            "Check these before making them prominent in the resume.",
             "",
             *_markdown_items(needs_verification),
             "",
-            "### Skills To Avoid Unless Proven",
+            "### Do Not Claim Yet",
             "",
-            *_markdown_items(skills_to_avoid),
+            "Keep these out of resume-facing sections unless you can add real proof.",
+            "",
+            *_markdown_items(do_not_claim_yet),
             "",
             "### Missing Proof Next Actions",
             "",
@@ -1067,6 +1079,18 @@ def _tailored_resume_bullet_candidates(
     if not bullets and profile_text:
         bullets.append("Documented technical workflows and troubleshooting steps for users or teammates.")
     return bullets or ["Add bullets only after confirming real evidence for the role requirements."]
+
+
+def _tailored_supported_resume_claims(
+    evidence_summary: dict[str, list[dict[str, str]]],
+) -> list[str]:
+    claims = []
+    for item in evidence_summary["supported_evidence"]:
+        requirement = item["requirement"]
+        note = _clean_evidence_note(item.get("notes", ""))
+        detail = f" {note}" if note else " Profile/proof-backed evidence is present."
+        claims.append(f"{requirement}: supported resume claim to consider.{detail}")
+    return _dedupe(claims)
 
 
 def _matching_proof_blocks(
@@ -1279,6 +1303,25 @@ def _tailored_skills_to_avoid(
             avoid.append(item["requirement"])
     avoid.extend(_implied_sensitive_skills(missing_requirements))
     return _dedupe(avoid)
+
+
+def _tailored_do_not_claim_yet(
+    evidence_summary: dict[str, list[dict[str, str]]],
+    skills_to_avoid: list[str],
+) -> list[str]:
+    items = []
+    verification_requirements = {
+        item["requirement"] for item in evidence_summary["needs_verification"]
+    }
+    for item in evidence_summary["missing_proof"]:
+        requirement = item["requirement"]
+        note = _clean_evidence_note(item.get("notes", ""))
+        detail = f" {note}" if note else ""
+        items.append(f"{requirement}: missing proof; do not claim yet.{detail}")
+    for skill in skills_to_avoid:
+        if skill not in verification_requirements and skill not in items:
+            items.append(skill)
+    return _dedupe(items)
 
 
 def _implied_sensitive_skills(requirements: list[str]) -> list[str]:

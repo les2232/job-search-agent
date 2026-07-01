@@ -775,6 +775,12 @@ def test_evidence_answers_drive_decision_summary_and_missing_proof() -> None:
     assert "Python scripting/development" in tailored_resume
     assert "API integration experience" in tailored_resume
     assert "LLM or large language model workflow experience" in tailored_resume
+    assert "### Supported Resume Claims" in tailored_resume
+    assert "Python scripting/development: supported resume claim to consider." in tailored_resume
+    assert "### Needs Verification Before Emphasizing" in tailored_resume
+    assert "API integration experience: partial evidence" in tailored_resume
+    assert "### Do Not Claim Yet" in tailored_resume
+    assert "LLM or large language model workflow experience: missing proof; do not claim yet." in tailored_resume
 
 
 def test_tailored_resume_uses_reviewable_builder_and_preserves_details() -> None:
@@ -871,8 +877,9 @@ def test_tailored_resume_separates_resume_draft_from_internal_review_notes() -> 
     assert "## Resume Summary Draft" in tailored_resume
     assert "## Resume Bullet Candidates" in tailored_resume
     assert "## Internal Review Notes" in tailored_resume
-    assert "### Needs Verification" in tailored_resume
-    assert "### Skills To Avoid Unless Proven" in tailored_resume
+    assert "### Supported Resume Claims" in tailored_resume
+    assert "### Needs Verification Before Emphasizing" in tailored_resume
+    assert "### Do Not Claim Yet" in tailored_resume
     assert "### Missing Proof Next Actions" in tailored_resume
     assert "Auto-suggested from profile" not in tailored_resume
     assert "profile appears to mention" not in tailored_resume
