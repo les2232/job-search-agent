@@ -910,7 +910,16 @@ def test_tailored_resume_includes_relevant_project_evidence_blocks() -> None:
     assert "Job Search Automation Tool - supports" in tailored_resume
     assert "IT Support Assistant - supports" in tailored_resume
     assert "TradeOS / Dashboard Project - supports" in tailored_resume
-    assert "Built a local-first Python and Streamlit application" in tailored_resume
-    assert "Developed a Flask-based IT support assistant" in tailored_resume
-    assert "Built Streamlit dashboard/reporting tools" in tailored_resume
+    assert (
+        "Project evidence: Job Search Automation Tool — Built a local-first "
+        "Python and Streamlit application"
+    ) in tailored_resume
+    assert (
+        "Project evidence: IT Support Assistant — Developed a Flask-based "
+        "IT support assistant"
+    ) in tailored_resume
+    assert (
+        "Project evidence: TradeOS / Dashboard Project — Built Streamlit "
+        "dashboard/reporting tools"
+    ) in tailored_resume
     assert "Production AI engineering" not in tailored_resume.split("## Internal Review Notes", 1)[0]

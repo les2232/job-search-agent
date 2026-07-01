@@ -1257,19 +1257,19 @@ def _project_grounded_bullets(
             "python" in requirement_text or "automation" in requirement_text
         ):
             bullets.append(
-                "Built a local-first Python and Streamlit application that parses job postings, detects hard-skill gaps, maps candidate evidence, and generates tailored application packets."
+                f"Project evidence: {name} — Built a local-first Python and Streamlit application that parses job postings, detects hard-skill gaps, maps candidate evidence, and generates tailored application packets."
             )
         elif name == "IT Support Assistant" and (
             "api" in requirement_text or "ai" in requirement_text or "support" in text
         ):
             bullets.append(
-                "Developed a Flask-based IT support assistant using local knowledge base retrieval, SQLite logging, structured troubleshooting flows, and evaluation scripts."
+                f"Project evidence: {name} — Developed a Flask-based IT support assistant using local knowledge base retrieval, SQLite logging, structured troubleshooting flows, and evaluation scripts."
             )
         elif name == "TradeOS / Dashboard Project" and (
             "data" in requirement_text or "api" in requirement_text or "dashboard" in text
         ):
             bullets.append(
-                "Built Streamlit dashboard/reporting tools using Python, Pandas, SQLite/event logging, and API-connected project workflows."
+                f"Project evidence: {name} — Built Streamlit dashboard/reporting tools using Python, Pandas, SQLite/event logging, and API-connected project workflows."
             )
     return _dedupe(bullets)
 
